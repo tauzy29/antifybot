@@ -1,41 +1,77 @@
 require('dotenv').config();
 
-const { REST, Routes, SlashCommandBuilder } = require('discord.js');
+const {
+  REST,
+  Routes,
+  SlashCommandBuilder
+} = require('discord.js');
 
-console.log("Starting deploy...");
+console.log("🚀 Starting global command deployment...");
 
 const commands = [
-    new SlashCommandBuilder()
-        .setName('ping')
-        .setDescription('Replies with pong'),
 
-    new SlashCommandBuilder()
-        .setName('scan')
-        .setDescription('Scan text')
-        .addStringOption(option =>
-            option.setName('text')
-                .setDescription('Text to scan')
-                .setRequired(true))
-];
+  // ==========================
+  // /ping
+  // ==========================
 
-const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
+  new SlashCommandBuilder()
+    .setName('ping')
+    .setDescription('Check bot status'),
+
+  // ==========================
+  // /scan
+  // ==========================
+
+  new SlashCommandBuilder()
+    .setName('scan')
+    .setDescription('Scan text for scams')
+    .addStringOption(option =>
+      option.setName('text')
+        .setDescription('Text to scan')
+        .setRequired(true)
+    ),
+
+  // ==========================
+  // /scanhistory
+  // ==========================
+
+  new SlashCommandBuilder()
+    .setName('scanhistory')
+    .setDescription('Scan previous messages for scams')
+
+].map(command => command.toJSON());
+
+const rest = new REST({
+  version: '10'
+}).setToken(process.env.DISCORD_TOKEN);
+
+// ==============================
+// GLOBAL DEPLOY
+// ==============================
 
 (async () => {
-    try {
 
-        console.log("Deploying commands...");
+  try {
 
-        await rest.put(
-            Routes.applicationGuildCommands(
-                process.env.CLIENT_ID,
-                "1402903975908606013"
-            ),
-            { body: commands }
-        );
+    console.log("📡 Deploying global commands...");
 
-        console.log("✅ Commands deployed successfully");
+    await rest.put(
 
-    } catch (error) {
-        console.error(error);
-    }
+      Routes.applicationCommands(
+        process.env.CLIENT_ID
+      ),
+
+      {
+        body: commands
+      }
+    );
+
+    console.log(
+      "✅ Global slash commands deployed successfully"
+    );
+
+  } catch (error) {
+
+    console.error(error);
+  }
 })();
