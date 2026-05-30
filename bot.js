@@ -10,8 +10,23 @@ const {
   PermissionsBitField
 } = require('discord.js');
 
-const Tesseract = require('tesseract.js');
+const { createWorker } = require('tesseract.js');
 const axios = require('axios');
+const Database = require('better-sqlite3');
+const startDashboard = require('./dashboard.js');
+
+const db = new Database('database.sqlite');
+db.exec(`
+  CREATE TABLE IF NOT EXISTS logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    author TEXT,
+    reason TEXT,
+    content TEXT,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+  )
+`);
+
+let dashboardAPI;
 
 const client = new Client({
   intents: [
@@ -67,14 +82,20 @@ function normalize(text) {
     .replace(/[^a-z0-9 ]/g, '');
 }
 
+// Escape string for regex
+function escapeRegExp(string) {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // $& means the whole matched string
+}
+
 // Scam detection
 function isScam(text) {
 
   text = normalize(text);
 
-  return scamKeywords.some(word =>
-    text.includes(word)
-  );
+  return scamKeywords.some(word => {
+    const regex = new RegExp(`\\b${escapeRegExp(word)}\\b`);
+    return regex.test(text);
+  });
 }
 
 // URL extraction
@@ -133,6 +154,18 @@ async function scanUrl(url) {
 async function punish(message, reason) {
 
   try {
+    const stmt = db.prepare('INSERT INTO logs (author, reason, content) VALUES (?, ?, ?)');
+    const info = stmt.run(message.author.tag, reason, message.content);
+
+    if (dashboardAPI) {
+      dashboardAPI.emitNewLog({
+        id: info.lastInsertRowid,
+        author: message.author.tag,
+        reason: reason,
+        content: message.content,
+        timestamp: new Date().toISOString()
+      });
+    }
 
     await message.delete();
 
@@ -162,10 +195,31 @@ async function punish(message, reason) {
 }
 
 // ==============================
+// OCR WORKER
+// ==============================
+
+let tesseractWorker;
+
+async function initWorker() {
+  console.log("Initializing Tesseract worker...");
+  tesseractWorker = await createWorker('eng', 1, {
+    workerPath: require.resolve('tesseract.js/src/worker-script/node/index.js'),
+    langPath: '.',
+    gzip: false,
+    logger: m => console.log(m)
+  });
+  console.log("✅ Tesseract worker ready.");
+}
+
+// ==============================
 // READY EVENT
 // ==============================
 
-client.once('ready', () => {
+client.once('ready', async () => {
+
+  await initWorker();
+
+  dashboardAPI = startDashboard();
 
   console.log(
     `✅ Logged in as ${client.user.tag}`
@@ -244,10 +298,7 @@ client.on('messageCreate', async (message) => {
 
           console.log("Scanning image...");
 
-          const result = await Tesseract.recognize(
-            attachment.url,
-            'eng'
-          );
+          const result = await tesseractWorker.recognize(attachment.url);
 
           const extractedText =
             result.data.text;
@@ -401,11 +452,7 @@ client.on('interactionCreate', async interaction => {
                   `Scanning old image from ${msg.author.tag}`
                 );
 
-                const result =
-                  await Tesseract.recognize(
-                    attachment.url,
-                    'eng'
-                  );
+                const result = await tesseractWorker.recognize(attachment.url);
 
                 const extractedText =
                   result.data.text;
