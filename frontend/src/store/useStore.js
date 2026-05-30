@@ -2,8 +2,7 @@ import { create } from 'zustand';
 import axios from 'axios';
 import io from 'socket.io-client';
 
-const API_BASE_URL = 'http://localhost:5000/api';
-const BACKEND_URL = 'http://localhost:5000';
+import { API_BASE_URL, BACKEND_URL } from '../config';
 let socketConnection = null;
 
 // Configure axios defaults to pass session cookies

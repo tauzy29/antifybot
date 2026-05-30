@@ -4,6 +4,8 @@ const passport = require('passport');
 
 const router = express.Router();
 
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
+
 // ====================================
 // LOGIN ROUTE
 // ====================================
@@ -25,13 +27,13 @@ router.get('/callback',
   passport.authenticate('discord', {
 
     failureRedirect:
-      'http://localhost:5173/login'
+      `${FRONTEND_URL}/login`
   }),
 
 (req, res) => {
 
   res.redirect(
-    'http://localhost:5173/dashboard'
+    `${FRONTEND_URL}/dashboard`
   );
 });
 
@@ -68,7 +70,7 @@ router.get('/logout',
   req.logout(() => {
 
     res.redirect(
-      'http://localhost:5173'
+      FRONTEND_URL
     );
   });
 });

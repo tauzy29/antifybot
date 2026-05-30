@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { X, ShieldAlert, AlertTriangle, Hammer, Activity } from 'lucide-react';
 import Card from './Card';
+import { API_BASE_URL } from '../config';
 import './OffenderModal.css';
 
 const OffenderModal = ({ userId, guildId, onClose }) => {
@@ -12,7 +13,7 @@ const OffenderModal = ({ userId, guildId, onClose }) => {
   useEffect(() => {
     const fetchOffender = async () => {
       try {
-        const res = await axios.get(`http://localhost:5000/api/users/${guildId}/${userId}`, {
+        const res = await axios.get(`${API_BASE_URL}/users/${guildId}/${userId}`, {
           withCredentials: true
         });
         setData(res.data);

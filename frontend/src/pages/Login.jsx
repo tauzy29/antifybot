@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import Button from '../components/Button';
 import { useStore } from '../store/useStore';
+import { BACKEND_URL } from '../config';
 import './Login.css';
 
 const Login = () => {
@@ -21,8 +22,8 @@ const Login = () => {
   }, [isAuthenticated, navigate]);
 
   const handleDiscordLogin = () => {
-    // Redirect to Discord OAuth backend endpoint on Port 5000
-    window.location.href = 'http://localhost:5000/api/auth/login';
+    // Redirect to Discord OAuth backend endpoint
+    window.location.href = `${BACKEND_URL}/api/auth/login`;
   };
 
   return (
