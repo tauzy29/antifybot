@@ -1,0 +1,25 @@
+{
+  "name": "antify-backend",
+  "version": "1.0.0",
+  "description": "ANTIFY SaaS Dashboard Backend Server",
+  "main": "../bot.js",
+  "scripts": {
+    "start": "node ../bot.js",
+    "dev": "nodemon ../bot.js"
+  },
+  "dependencies": {
+    "axios": "^1.6.0",
+    "cookie-parser": "^1.4.6",
+    "cors": "^2.8.6",
+    "dotenv": "^16.6.1",
+    "express": "^4.22.2",
+    "express-session": "^1.19.0",
+    "mongoose": "^8.24.0",
+    "passport": "^0.6.0",
+    "passport-discord": "^0.1.4",
+    "socket.io": "^4.8.3"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}

@@ -1,5 +1,5 @@
 // ==============================
-// ANTIFY BOT - COMPLETE bot.js
+// ANTIFY BOT - COMPLETE bot.js with Full Stack Integration
 // ==============================
 
 require('dotenv').config();
@@ -12,12 +12,16 @@ const {
 
 const Tesseract = require('tesseract.js');
 const axios = require('axios');
+const startServer = require('./backend/server');
+const { Log, Warning, Punishment, Settings, Guild, HistoricalScanJob } = require('./backend/models');
+const { activeScans, startHistoricalScan, cancelHistoricalScan, resumeHistoricalScan, archiveAndActionMessage, updateGuildAnalyticsScanned, calculateScamScore, shouldBypass } = require('./backend/helpers/scanner');
 
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildVoiceStates
   ]
 });
 
@@ -57,7 +61,6 @@ const badDomains = [
 
 // Normalize text
 function normalize(text) {
-
   return text
     .toLowerCase()
     .replace(/0/g, 'o')
@@ -67,25 +70,23 @@ function normalize(text) {
     .replace(/[^a-z0-9 ]/g, '');
 }
 
-// Scam detection
-function isScam(text) {
-
+// Scam detection (checks default and guild-specific custom keywords)
+function isScam(text, settings) {
   text = normalize(text);
-
-  return scamKeywords.some(word =>
-    text.includes(word)
+  const customKeywords = settings?.blacklistKeywords || [];
+  const allKeywords = [...scamKeywords, ...customKeywords];
+  return allKeywords.some(word =>
+    text.includes(word.toLowerCase())
   );
 }
 
 // URL extraction
 function extractUrls(text) {
-
   return text.match(/https?:\/\/[^\s]+/g);
 }
 
 // Bad domain detection
 function hasBadDomain(url) {
-
   return badDomains.some(domain =>
     url.includes(domain)
   );
@@ -93,9 +94,7 @@ function hasBadDomain(url) {
 
 // VirusTotal Scan
 async function scanUrl(url) {
-
   try {
-
     const submit = await axios.post(
       'https://www.virustotal.com/api/v3/urls',
       new URLSearchParams({ url }),
@@ -118,45 +117,63 @@ async function scanUrl(url) {
     );
 
     const stats = result.data.data.attributes.stats;
-
     return stats.malicious > 0;
 
   } catch (err) {
-
     console.log("VirusTotal Error:", err.message);
-
     return false;
   }
 }
 
-// Punishment
-async function punish(message, reason) {
-
+// Unified Punish Function
+async function punish(message, reason, type, severity = 'high', score = null) {
   try {
+    const guildId = message.guildId;
+    const settings = await Settings.findOne({ guildId }) || new Settings({ guildId });
+    
+    let action = 'Warned';
+    if (settings.autoBan) action = 'Banned';
+    else if (settings.autoKick) action = 'Kicked';
+    else if (settings.autoTimeout) action = 'Muted';
 
-    await message.delete();
-
-    if (
-      message.member &&
-      message.member.moderatable
-    ) {
-
-      await message.member.timeout(
-        5 * 60 * 1000,
-        reason
-      );
+    // Execute Discord punishment action
+    if (action === 'Banned') {
+      if (message.member && message.member.bannable) {
+        await message.member.ban({ reason });
+      }
+    } else if (action === 'Kicked') {
+      if (message.member && message.member.kickable) {
+        await message.member.kick(reason);
+      }
+    } else if (action === 'Muted') {
+      if (message.member && message.member.moderatable) {
+        await message.member.timeout(5 * 60 * 1000, reason); // 5 min mute
+      }
     }
 
+    const finalScore = score !== null ? score : (severity === 'critical' ? 98 : (severity === 'high' ? 88 : 75));
+    const detection = {
+      type,
+      severity,
+      reason,
+      detectionCategory: type === 'Spam Words' ? 'Spam' : (type === 'Phishing Link' ? 'Phishing' : 'OCR'),
+      scamScore: finalScore,
+      AIConfidence: finalScore,
+      matchedKeywords: [reason],
+      imageDetected: type === 'Scam Image'
+    };
+
+    // Archive message, save logs/detections/infractions, update analytics, emit sockets, then delete message
+    await archiveAndActionMessage(message, detection);
+
+    // Send Alert to Channel
     await message.channel.send(
-      `🚨 ${message.author} muted.\nReason: ${reason}`
+      `🚨 **ANTIFY Protection Active** | ${message.author} was **${action.toLowerCase()}**.\nReason: *${reason}*`
     );
 
-    console.log(
-      `Blocked ${message.author.tag} | ${reason}`
-    );
+    console.log(`🛡️ Blocked ${message.author.tag} | Action: ${action} | Reason: ${reason}`);
 
   } catch (err) {
-
     console.log("Punish Error:", err);
   }
 }
@@ -165,11 +182,91 @@ async function punish(message, reason) {
 // READY EVENT
 // ==============================
 
-client.once('ready', () => {
+client.once('ready', async () => {
+  console.log(`✅ Logged in as ${client.user.tag}`);
+  // Start the HTTP express + Socket.io server (configured on Port 3000 now)
+  startServer(client);
 
-  console.log(
-    `✅ Logged in as ${client.user.tag}`
-  );
+  // Resume interrupted scan jobs on boot
+  try {
+    const scanningJobs = await HistoricalScanJob.find({ status: 'scanning' });
+    for (const job of scanningJobs) {
+      console.log(`⏳ Auto-resuming scan job for guild ${job.guildId} on bot startup...`);
+      resumeHistoricalScan(client, job.guildId, job.moderatorId).catch(err => {
+        console.error(`[Scanner] Failed to auto-resume scan for guild ${job.guildId}:`, err.message);
+      });
+    }
+  } catch (resumeErr) {
+    console.error('[Scanner] Failed to query scanning jobs on startup:', resumeErr.message);
+  }
+});
+
+// ==============================
+// GUILD LIFECYCLE EVENTS
+// ==============================
+
+client.on('guildCreate', async (guild) => {
+  try {
+    console.log(`🤖 Bot joined a new guild: ${guild.name} (${guild.id})`);
+    
+    // Save to Guild collection
+    let dbGuild = await Guild.findOne({ guildId: guild.id });
+    if (!dbGuild) {
+      dbGuild = new Guild({
+        guildId: guild.id,
+        name: guild.name,
+        icon: guild.icon,
+        ownerId: guild.ownerId
+      });
+      await dbGuild.save();
+    }
+    
+    // Save default settings
+    let dbSettings = await Settings.findOne({ guildId: guild.id });
+    if (!dbSettings) {
+      dbSettings = new Settings({ guildId: guild.id });
+      await dbSettings.save();
+    }
+
+    // Broadcast update via Socket.io to refresh selectors
+    if (client.io) {
+      const iconUrl = guild.icon 
+        ? `https://cdn.discordapp.com/icons/${guild.id}/${guild.icon}.png`
+        : null;
+
+      client.io.emit('guild_added', {
+        id: guild.id,
+        name: guild.name,
+        icon: iconUrl,
+        botActive: true,
+        settings: dbSettings
+      });
+    }
+
+    // Start automatic shallow historical scan (depth: 50)
+    console.log(`🤖 Starting automatic shallow historical scan for new guild: ${guild.name}`);
+    startHistoricalScan(client, guild.id, null, 50).catch(err => {
+      console.error('Failed to run automatic historical scan on join:', err);
+    });
+  } catch (error) {
+    console.error('Error handling guildCreate:', error);
+  }
+});
+
+client.on('guildDelete', async (guild) => {
+  try {
+    console.log(`🤖 Bot left a guild: ${guild.name} (${guild.id})`);
+    
+    // Remove guild record
+    await Guild.deleteOne({ guildId: guild.id });
+    
+    // Broadcast via socket
+    if (client.io) {
+      client.io.emit('guild_removed', guild.id);
+    }
+  } catch (error) {
+    console.error('Error handling guildDelete:', error);
+  }
 });
 
 // ==============================
@@ -177,52 +274,70 @@ client.once('ready', () => {
 // ==============================
 
 client.on('messageCreate', async (message) => {
+  if (message.author.bot || !message.guild) return;
 
-  if (message.author.bot) return;
+  const guildId = message.guildId;
+  
+  // Increment scanning metric in background
+  updateGuildAnalyticsScanned(guildId, message.createdAt || new Date()).catch(console.error);
 
-  console.log(
-    `${message.author.tag}: ${message.content}`
-  );
+  const settings = await Settings.findOne({ guildId }) || new Settings({ guildId });
+
+  // 1. Trust system check
+  if (shouldBypass(message, message.member, settings)) {
+    console.log(`[Bot] Bypassing scan for trusted user/channel: ${message.author.tag} in #${message.channel.name}`);
+    return;
+  }
+
+  const sensitivity = settings.scanSensitivity !== undefined ? settings.scanSensitivity : 50;
 
   // ==========================
   // TEXT SCAN
   // ==========================
-
-  if (isScam(message.content)) {
-
-    return punish(
-      message,
-      "Scam text detected"
-    );
+  if (message.content) {
+    const scamScore = calculateScamScore(message.content, settings);
+    if (scamScore >= sensitivity) {
+      return punish(
+        message,
+        `Scam text detected (Score: ${scamScore})`,
+        "Spam Words",
+        scamScore >= 85 ? 'critical' : (scamScore >= 65 ? 'high' : 'medium'),
+        scamScore
+      );
+    }
   }
 
   // ==========================
   // LINK SCAN
   // ==========================
-
   const urls = extractUrls(message.content);
 
   if (urls) {
-
     for (const url of urls) {
-
       // suspicious domains
       if (hasBadDomain(url)) {
-
-        return punish(
-          message,
-          "Suspicious domain detected"
-        );
+        const scamScore = calculateScamScore(message.content, settings);
+        if (scamScore >= sensitivity) {
+          return punish(
+            message,
+            `Suspicious domain detected (Score: ${scamScore})`,
+            "Phishing Link",
+            "high",
+            scamScore
+          );
+        }
       }
 
       // VirusTotal
       const malicious = await scanUrl(url);
 
       if (malicious) {
-
         return punish(
           message,
-          "Malicious link detected"
+          "Malicious link detected",
+          "Phishing Link",
+          "critical",
+          98
         );
       }
     }
@@ -231,17 +346,12 @@ client.on('messageCreate', async (message) => {
   // ==========================
   // IMAGE OCR SCAN
   // ==========================
-
-  if (message.attachments.size > 0) {
-
+  if (settings.ocrEnabled && message.attachments.size > 0) {
     for (const attachment of message.attachments.values()) {
-
       if (
         attachment.contentType?.startsWith('image')
       ) {
-
         try {
-
           console.log("Scanning image...");
 
           const result = await Tesseract.recognize(
@@ -249,58 +359,54 @@ client.on('messageCreate', async (message) => {
             'eng'
           );
 
-          const extractedText =
-            result.data.text;
-
-          console.log(
-            "OCR TEXT:",
-            extractedText
-          );
+          const extractedText = result.data.text;
 
           // OCR keyword scan
-          if (isScam(extractedText)) {
-
+          const scamScore = calculateScamScore(extractedText, settings);
+          if (scamScore >= sensitivity) {
             return punish(
               message,
-              "Scam image detected"
+              `Scam text inside image detected (Score: ${scamScore})`,
+              "Scam Image",
+              scamScore >= 85 ? 'critical' : (scamScore >= 65 ? 'high' : 'medium'),
+              scamScore
             );
           }
 
           // OCR URL scan
-          const imageUrls =
-            extractUrls(extractedText);
+          const imageUrls = extractUrls(extractedText);
 
           if (imageUrls) {
-
             for (const url of imageUrls) {
-
               if (hasBadDomain(url)) {
-
-                return punish(
-                  message,
-                  "Bad domain inside image"
-                );
+                const scamScore = calculateScamScore(extractedText, settings);
+                if (scamScore >= sensitivity) {
+                  return punish(
+                    message,
+                    `Bad domain inside image detected (Score: ${scamScore})`,
+                    "Scam Image",
+                    "high",
+                    scamScore
+                  );
+                }
               }
 
-              const malicious =
-                await scanUrl(url);
+              const malicious = await scanUrl(url);
 
               if (malicious) {
-
                 return punish(
                   message,
-                  "Malicious URL inside image"
+                  "Malicious URL inside image detected",
+                  "Scam Image",
+                  "critical",
+                  98
                 );
               }
             }
           }
 
         } catch (err) {
-
-          console.log(
-            "OCR Error:",
-            err.message
-          );
+          console.log("OCR Error:", err.message);
         }
       }
     }
@@ -312,22 +418,16 @@ client.on('messageCreate', async (message) => {
 // ==============================
 
 client.on('interactionCreate', async interaction => {
-
   try {
-
     if (!interaction.isChatInputCommand()) return;
 
-    console.log(
-      "Slash Command:",
-      interaction.commandName
-    );
+    console.log("Slash Command:", interaction.commandName);
 
     // ==========================
     // /ping
     // ==========================
 
     if (interaction.commandName === 'ping') {
-
       return interaction.reply('🏓 Pong!');
     }
 
@@ -336,135 +436,99 @@ client.on('interactionCreate', async interaction => {
     // ==========================
 
     if (interaction.commandName === 'scan') {
+      const text = interaction.options.getString('text');
+      const guildId = interaction.guildId;
+      const settings = await Settings.findOne({ guildId }) || new Settings({ guildId });
 
-      const text =
-        interaction.options.getString('text');
-
-      if (isScam(text)) {
-
-        return interaction.reply(
-          "⚠️ Suspicious text detected"
-        );
+      if (isScam(text, settings)) {
+        return interaction.reply("⚠️ Suspicious text detected");
       }
 
-      return interaction.reply(
-        "✅ Looks safe"
-      );
+      return interaction.reply("✅ Looks safe");
     }
 
     // ==========================
-    // /scanhistory
+    // Historical Scanning Commands
     // ==========================
 
-    if (
-      interaction.commandName === 'scanhistory'
-    ) {
-
-      await interaction.reply(
-        "🔍 Scanning previous messages..."
-      );
-
-      const messages =
-        await interaction.channel.messages.fetch({
-          limit: 100
-        });
-
-      let deleted = 0;
-
-      for (const msg of messages.values()) {
-
-        if (msg.author.bot) continue;
-
-        let flagged = false;
-
-        // TEXT SCAN
-        if (isScam(msg.content)) {
-
-          flagged = true;
-        }
-
-        // IMAGE OCR SCAN
-        if (
-          !flagged &&
-          msg.attachments.size > 0
-        ) {
-
-          for (const attachment of msg.attachments.values()) {
-
-            if (
-              attachment.contentType?.startsWith('image')
-            ) {
-
-              try {
-
-                console.log(
-                  `Scanning old image from ${msg.author.tag}`
-                );
-
-                const result =
-                  await Tesseract.recognize(
-                    attachment.url,
-                    'eng'
-                  );
-
-                const extractedText =
-                  result.data.text;
-
-                console.log(
-                  "OLD OCR:",
-                  extractedText
-                );
-
-                if (isScam(extractedText)) {
-
-                  flagged = true;
-                }
-
-              } catch (err) {
-
-                console.log(
-                  "History OCR Error:",
-                  err.message
-                );
-              }
-            }
-          }
-        }
-
-        // DELETE
-        if (flagged) {
-
-          try {
-
-            await msg.delete();
-
-            deleted++;
-
-            console.log(
-              "Deleted old scam message"
-            );
-
-          } catch (err) {
-
-            console.log(
-              "Delete Error:",
-              err.message
-            );
-          }
-        }
+    if (['scanhistory', 'historyscan', 'scanprevious', 'loghistory'].includes(interaction.commandName)) {
+      // Check permissions
+      if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+        return interaction.reply({ content: '❌ You must have Administrator permissions to run this command.', ephemeral: true });
       }
 
-      await interaction.followUp(
-        `✅ Scan complete.\nDeleted ${deleted} scam messages.`
-      );
+      const action = interaction.options.getString('action') || 'start';
+      const depth = interaction.options.getInteger('depth') || 100;
+      const channelOpt = interaction.options.getChannel('channel');
+      const guildId = interaction.guildId;
+
+      if (action === 'cancel') {
+        await interaction.reply(`⏳ **ANTIFY Scanning Engine** | Cancelling historical scan...`);
+        const result = await cancelHistoricalScan(guildId);
+        if (!result.success) {
+          return interaction.editReply(`❌ Failed to cancel scan: ${result.message}`);
+        }
+        return interaction.editReply(`✅ **Historical Scan Cancelled** | Telemetry scanning halted.`);
+      }
+
+      if (action === 'resume') {
+        await interaction.reply(`⏳ **ANTIFY Scanning Engine** | Resuming historical scan...`);
+        const result = await resumeHistoricalScan(client, guildId, interaction.user.id);
+        if (!result.success) {
+          return interaction.editReply(`❌ Failed to resume scan: ${result.message}`);
+        }
+        await interaction.editReply(`⏳ **Historical Scan Resumed** | Background engine restarted.`);
+
+        const interval = setInterval(async () => {
+          const job = await HistoricalScanJob.findOne({ guildId });
+          if (!job || job.status !== 'scanning') {
+            clearInterval(interval);
+            if (job && job.status === 'completed') {
+              await interaction.editReply(`✅ **Historical Scan Complete**\n- Channels processed: ${job.processedChannels}/${job.totalChannels}\n- Messages scanned: ${job.messagesScanned}\n- Threats detected & stored: ${job.detectionsFound}`);
+            } else if (job && job.status === 'cancelled') {
+              await interaction.editReply(`✅ **Historical Scan Cancelled** | Telemetry scanning halted.`);
+            } else if (job && job.status === 'paused') {
+              await interaction.editReply(`✅ **Historical Scan Paused** | Telemetry scanning paused.`);
+            } else {
+              await interaction.editReply(`✅ **Historical Scan Complete** | Telemetry logs synchronized.`);
+            }
+          } else {
+            await interaction.editReply(`⏳ **Historical Scan In Progress** (${Math.round((job.processedChannels / (job.totalChannels || 1)) * 100)}%)\n- Current Channel: \`#${job.currentChannelName || 'Unknown'}\`\n- Channels processed: ${job.processedChannels}/${job.totalChannels}\n- Messages scanned: ${job.messagesScanned}\n- Threats detected: ${job.detectionsFound}`);
+          }
+        }, 3000);
+        return;
+      }
+
+      // Default: Start new scan
+      await interaction.reply(`🔍 **ANTIFY Scanning Engine** | Initializing historical scan (Depth: ${depth} messages per channel)...`);
+
+      const result = await startHistoricalScan(client, guildId, channelOpt?.id, depth, interaction.user.id);
+
+      if (!result.success) {
+        return interaction.editReply(`❌ Failed to start scan: ${result.message}`);
+      }
+
+      const interval = setInterval(async () => {
+        const job = await HistoricalScanJob.findOne({ guildId });
+        if (!job || job.status !== 'scanning') {
+          clearInterval(interval);
+          if (job && job.status === 'completed') {
+            await interaction.editReply(`✅ **Historical Scan Complete**\n- Channels processed: ${job.processedChannels}/${job.totalChannels}\n- Messages scanned: ${job.messagesScanned}\n- Threats detected & stored: ${job.detectionsFound}`);
+          } else if (job && job.status === 'cancelled') {
+            await interaction.editReply(`✅ **Historical Scan Cancelled** | Telemetry scanning halted.`);
+          } else if (job && job.status === 'paused') {
+            await interaction.editReply(`✅ **Historical Scan Paused** | Telemetry scanning paused.`);
+          } else {
+            await interaction.editReply(`✅ **Historical Scan Complete** | Telemetry logs synchronized.`);
+          }
+        } else {
+          await interaction.editReply(`⏳ **Historical Scan In Progress** (${Math.round((job.processedChannels / (job.totalChannels || 1)) * 100)}%)\n- Current Channel: \`#${job.currentChannelName || 'Unknown'}\`\n- Channels processed: ${job.processedChannels}/${job.totalChannels}\n- Messages scanned: ${job.messagesScanned}\n- Threats detected: ${job.detectionsFound}`);
+        }
+      }, 3000);
     }
 
   } catch (err) {
-
-    console.log(
-      "Interaction Error:",
-      err
-    );
+    console.log("Interaction Error:", err);
   }
 });
 
