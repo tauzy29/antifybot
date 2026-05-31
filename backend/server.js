@@ -12,7 +12,7 @@ const session = require('express-session');
 const passport = require('passport');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
-const MongoStore = require('connect-mongo');
+const MongoStore = require('connect-mongo').default || require('connect-mongo');
 
 const connectDB = require('./db');
 
