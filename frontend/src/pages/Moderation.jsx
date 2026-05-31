@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { 
   Shield, Hourglass, Ban, AlertTriangle, ShieldAlert, CheckCircle, 
   Trash2, Eye, Clock, RotateCcw, ShieldCheck, FileText, Search, History,
-  ArrowRight, ShieldX, Check, AlertCircle, ArrowLeft, ArrowRightSquare, Globe
+  ArrowRight, ShieldX, Check, AlertCircle, ArrowLeft, ArrowRightSquare, Globe,
+  MoreVertical, ChevronDown
 } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import Card from '../components/Card';
@@ -89,6 +90,20 @@ const Moderation = () => {
 
   // Unified actions list filters
   const [actionTypeFilter, setActionTypeFilter] = useState('All');
+
+  // Actions dropdown state
+  const [openDropdownId, setOpenDropdownId] = useState(null);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handleOutsideClick = (e) => {
+      if (openDropdownId && !e.target.closest('.dropdown-container')) {
+        setOpenDropdownId(null);
+      }
+    };
+    document.addEventListener('click', handleOutsideClick);
+    return () => document.removeEventListener('click', handleOutsideClick);
+  }, [openDropdownId]);
 
   // Trigger data fetching on mount / guild change
   useEffect(() => {
@@ -854,12 +869,10 @@ const Moderation = () => {
                         <thead>
                           <tr>
                             <th>User</th>
-                            <th>Punishment Type</th>
-                            <th>Original Reason</th>
-                            <th>User Explanation</th>
+                            <th>Incident Details</th>
+                            <th>Appeal Explanation</th>
                             <th>Status</th>
-                            <th>Moderator Decision Notes</th>
-                            <th>Actions</th>
+                            <th>Actions & Notes</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -869,53 +882,66 @@ const Moderation = () => {
                             return (
                               <tr key={appeal._id}>
                                 <td>
-                                  <strong>{appeal.username}</strong>
-                                  <div className="text-muted" style={{ fontSize: '0.75rem' }}>ID: {appeal.userId}</div>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                    <strong style={{ color: 'var(--text-primary)' }}>{appeal.username}</strong>
+                                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>ID: {appeal.userId}</span>
+                                  </div>
                                 </td>
-                                <td>{appeal.type}</td>
-                                <td>{appeal.reason}</td>
-                                <td>"{appeal.appealReason || 'No justification text provided.'}"</td>
                                 <td>
-                                  <span className={`badge badge-${appeal.appealStatus.toLowerCase()}`}>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
+                                    <span className={`badge ${
+                                      appeal.type === 'Ban' ? 'badge-rejected' : 
+                                      appeal.type === 'Timeout' ? 'badge-pending' : 'badge-active'
+                                    }`} style={{ fontSize: '0.65rem' }}>
+                                      {appeal.type}
+                                    </span>
+                                    <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                                      {appeal.reason}
+                                    </span>
+                                  </div>
+                                </td>
+                                <td style={{ maxWidth: '250px', fontSize: '0.8rem', fontStyle: 'italic', color: 'var(--text-primary)', whiteSpace: 'normal', wordBreak: 'break-word' }}>
+                                  "{appeal.appealReason || 'No justification text provided.'}"
+                                </td>
+                                <td>
+                                  <span className={`badge badge-${appeal.appealStatus.toLowerCase()}`} style={{ fontSize: '0.7rem' }}>
                                     {appeal.appealStatus}
                                   </span>
                                 </td>
                                 <td>
                                   {isPending ? (
-                                    <input
-                                      type="text"
-                                      value={appealNotes[appeal._id] || ''}
-                                      placeholder="Decision reasons..."
-                                      className="appeal-notes-input"
-                                      onChange={(e) => setAppealNotes({...appealNotes, [appeal._id]: e.target.value})}
-                                      style={{
-                                        background: 'rgba(0,0,0,0.2)',
-                                        border: '1px solid var(--border-color)',
-                                        borderRadius: '4px',
-                                        padding: '4px 8px',
-                                        color: 'white',
-                                        fontSize: '0.85rem'
-                                      }}
-                                    />
-                                  ) : (
-                                    <span>{appeal.notes || 'No review notes.'}</span>
-                                  )}
-                                </td>
-                                <td>
-                                  <div className="action-cell">
-                                    {isPending ? (
-                                      <>
-                                        <Button className="btn-primary" onClick={() => handleAppeal(activeGuild.id, appeal._id, 'Approve', appealNotes[appeal._id] || '')}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxWidth: '220px' }}>
+                                      <input
+                                        type="text"
+                                        value={appealNotes[appeal._id] || ''}
+                                        placeholder="Review notes..."
+                                        className="appeal-notes-input"
+                                        onChange={(e) => setAppealNotes({...appealNotes, [appeal._id]: e.target.value})}
+                                        style={{
+                                          background: 'rgba(0,0,0,0.3)',
+                                          border: '1px solid var(--border-color)',
+                                          borderRadius: '6px',
+                                          padding: '6px 10px',
+                                          color: 'white',
+                                          fontSize: '0.8rem',
+                                          width: '100%',
+                                          boxSizing: 'border-box'
+                                        }}
+                                      />
+                                      <div style={{ display: 'flex', gap: '6px' }}>
+                                        <Button className="btn-primary" style={{ padding: '4px 10px', fontSize: '0.75rem', flex: 1 }} onClick={() => handleAppeal(activeGuild.id, appeal._id, 'Approve', appealNotes[appeal._id] || '')}>
                                           Approve
                                         </Button>
-                                        <Button variant="danger" onClick={() => handleAppeal(activeGuild.id, appeal._id, 'Reject', appealNotes[appeal._id] || '')}>
+                                        <Button variant="danger" style={{ padding: '4px 10px', fontSize: '0.75rem', flex: 1 }} onClick={() => handleAppeal(activeGuild.id, appeal._id, 'Reject', appealNotes[appeal._id] || '')}>
                                           Reject
                                         </Button>
-                                      </>
-                                    ) : (
-                                      <span className="text-muted">Reviewed</span>
-                                    )}
-                                  </div>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                                      <strong>Notes:</strong> {appeal.notes || 'No review notes.'}
+                                    </div>
+                                  )}
                                 </td>
                               </tr>
                             );
@@ -962,22 +988,37 @@ const Moderation = () => {
                           {deletedMessages.map(msg => (
                             <tr key={msg._id}>
                               <td>
-                                <strong>{msg.username}</strong>
-                                <div className="text-muted" style={{ fontSize: '0.75rem' }}>
-                                  #{msg.channelName} {msg.parentChannelName && `(under #${msg.parentChannelName})`}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                  <strong style={{ color: 'var(--text-primary)', fontSize: '0.9rem' }}>{msg.username}</strong>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                    <span className={`badge channel-badge-${msg.channelType}`} style={{ fontSize: '0.6rem', padding: '2px 6px', borderRadius: '4px', background: 'rgba(167,139,250,0.08)', color: '#a78bfa', border: '1px solid rgba(167,139,250,0.15)', whiteSpace: 'nowrap' }}>
+                                      {getChannelBadgeLabel(msg.channelType)}
+                                    </span>
+                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }} title={msg.parentChannelName ? `under #${msg.parentChannelName}` : ''}>
+                                      #{msg.parentChannelName ? `${msg.parentChannelName} > ` : ''}{msg.channelName}
+                                    </span>
+                                  </div>
                                 </div>
-                                <span className={`badge channel-badge-${msg.channelType}`} style={{ fontSize: '0.65rem', marginTop: '4px', display: 'inline-block', padding: '2px 6px', borderRadius: '4px', background: 'rgba(167,139,250,0.1)', color: '#c084fc', border: '1px solid rgba(167,139,250,0.2)' }}>
-                                  {getChannelBadgeLabel(msg.channelType)}
+                              </td>
+                              <td style={{ maxWidth: '240px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                <code style={{ background: 'rgba(0,0,0,0.25)', border: '1px solid var(--border-color)', borderRadius: '4px', padding: '3px 6px', fontSize: '0.8rem', color: 'var(--text-primary)', fontFamily: 'monospace' }}>
+                                  "{msg.originalContent || '[Attachments]'}"
+                                </code>
+                              </td>
+                              <td>
+                                <span className="badge" style={{ background: 'rgba(239, 68, 68, 0.08)', color: '#fca5a5', border: '1px solid rgba(239,68,68,0.15)', fontSize: '0.75rem' }}>
+                                  {msg.deletionReason}
                                 </span>
                               </td>
-                              <td style={{ maxWidth: '200px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                "{msg.originalContent || '[Attachments]'}"
-                              </td>
-                              <td>{msg.deletionReason}</td>
                               <td>
-                                <strong className={msg.scamScore >= 80 ? 'text-red' : 'text-purple'}>
-                                  {msg.scamScore}%
-                                </strong>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <div style={{ width: '40px', height: '4px', background: 'rgba(255,255,255,0.08)', borderRadius: '2px', overflow: 'hidden' }}>
+                                    <div style={{ width: `${msg.scamScore}%`, height: '100%', background: msg.scamScore >= 80 ? '#ef4444' : '#8b5cf6' }} />
+                                  </div>
+                                  <strong style={{ fontSize: '0.8rem', color: msg.scamScore >= 80 ? '#ef4444' : '#a78bfa' }}>
+                                    {msg.scamScore}%
+                                  </strong>
+                                </div>
                               </td>
                               <td>
                                 {msg.restored ? (
@@ -989,8 +1030,8 @@ const Moderation = () => {
                                 )}
                               </td>
                               <td>
-                                <div className="action-cell">
-                                  <Button variant="outline" onClick={() => {
+                                <div className="action-cell" style={{ gap: '6px' }}>
+                                  <Button variant="outline" style={{ padding: '4px 8px', fontSize: '0.75rem' }} onClick={() => {
                                     setSelectedEvidenceId(msg._id);
                                     setActiveSubTab('evidence');
                                   }}>
@@ -998,15 +1039,31 @@ const Moderation = () => {
                                   </Button>
                                   {!msg.restored && (
                                     <>
-                                      <Button className="btn-primary" onClick={() => markFalsePositive(activeGuild.id, msg._id, 'restore')}>
-                                        Restore Message
+                                      <Button className="btn-primary" style={{ padding: '4px 10px', fontSize: '0.75rem' }} onClick={() => markFalsePositive(activeGuild.id, msg._id, 'restore')}>
+                                        Restore
                                       </Button>
-                                      <Button variant="outline" onClick={() => markFalsePositive(activeGuild.id, msg._id, 'whitelist_pattern')}>
-                                        Whitelist Pattern
-                                      </Button>
-                                      <Button variant="outline" onClick={() => markFalsePositive(activeGuild.id, msg._id, 'whitelist_user')}>
-                                        Whitelist User
-                                      </Button>
+                                      <div className="dropdown-container">
+                                        <button 
+                                          className="dropdown-trigger-btn"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setOpenDropdownId(openDropdownId === msg._id ? null : msg._id);
+                                          }}
+                                          title="More Whitelist Options"
+                                        >
+                                          <MoreVertical size={14} />
+                                        </button>
+                                        {openDropdownId === msg._id && (
+                                          <div className="dropdown-menu">
+                                            <button onClick={() => { markFalsePositive(activeGuild.id, msg._id, 'whitelist_pattern'); setOpenDropdownId(null); }}>
+                                              Whitelist Pattern
+                                            </button>
+                                            <button onClick={() => { markFalsePositive(activeGuild.id, msg._id, 'whitelist_user'); setOpenDropdownId(null); }}>
+                                              Whitelist User
+                                            </button>
+                                          </div>
+                                        )}
+                                      </div>
                                     </>
                                   )}
                                 </div>
