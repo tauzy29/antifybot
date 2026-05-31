@@ -1,27 +1,49 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Activity, ShieldAlert, Settings, Crown, LogOut, Gavel } from 'lucide-react';
+import { LayoutDashboard, Activity, ShieldAlert, Settings, Crown, LogOut, Gavel, BarChart3, ShieldCheck } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import './Sidebar.css';
 
-const navItems = [
-  { name: 'Overview', path: '/', icon: LayoutDashboard },
-  { name: 'Analytics', path: '/analytics', icon: Activity },
-  { name: 'Moderation Center', path: '/moderation', icon: Gavel },
-  { name: 'Logs', path: '/logs', icon: ShieldAlert },
-  { name: 'Settings', path: '/settings', icon: Settings },
-  { name: 'Premium', path: '/premium', icon: Crown },
-];
-
 const Sidebar = () => {
-  const { activeGuild, logoutUser } = useStore();
+  const { activeGuild, logoutUser, user, premium } = useStore();
+
+  const getNavItems = () => {
+    const items = [
+      { name: 'Overview', path: '/', icon: LayoutDashboard },
+      { name: 'Analytics', path: '/analytics', icon: Activity },
+      { name: 'Moderation Center', path: '/moderation', icon: Gavel },
+      { name: 'Logs', path: '/logs', icon: ShieldAlert },
+      { name: 'Settings', path: '/settings', icon: Settings },
+      { name: 'Usage & Limits', path: '/usage-limits', icon: BarChart3 },
+    ];
+
+    items.push({ name: 'Premium Status', path: '/premium', icon: Crown });
+
+    // Global Bot Owner Panel
+    if (user && user.id === '1060801714187415552') {
+      items.push({ name: 'Owner Panel', path: '/owner-panel', icon: ShieldCheck });
+    }
+
+    return items;
+  };
+
+  const navItems = getNavItems();
+
+  const isOwner = user && user.id === '1060801714187415552';
+  const tierLabel = isOwner ? 'PRO+' : (premium?.plan === 'Pro' ? 'PRO' : 'FREE');
+  const tierClass = isOwner ? 'tier-pro-plus' : (premium?.plan === 'Pro' ? 'tier-pro' : 'tier-free');
 
   return (
     <aside className="sidebar glass">
       <div className="sidebar-header">
         <div className="logo-container">
           <img src="/logo.png" alt="ANTIFY Logo" className="logo-image" />
-          <span className="logo-text">ANTIFY</span>
+          <div className="logo-text-group">
+            <span className="logo-text">ANTIFY</span>
+            {activeGuild && activeGuild.botActive && (
+              <span className={`guild-tier-badge ${tierClass}`}>{tierLabel}</span>
+            )}
+          </div>
         </div>
       </div>
       

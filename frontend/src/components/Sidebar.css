@@ -90,3 +90,40 @@
   background: rgba(239, 68, 68, 0.1);
   color: #ef4444;
 }
+
+/* Tier Badges styling */
+.logo-text-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.guild-tier-badge {
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  padding: 1px 6px;
+  border-radius: 4px;
+  width: fit-content;
+  text-align: center;
+}
+
+.guild-tier-badge.tier-pro-plus {
+  background: linear-gradient(135deg, #f59e0b, #ef4444);
+  color: white;
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.guild-tier-badge.tier-pro {
+  background: linear-gradient(135deg, var(--accent-purple), var(--accent-blue));
+  color: white;
+  box-shadow: 0 0 10px rgba(139, 92, 246, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.guild-tier-badge.tier-free {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+}

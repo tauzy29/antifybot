@@ -36,7 +36,9 @@ const Dashboard = () => {
     cancelHistoricalScan, 
     resumeHistoricalScan, 
     deletedMessages, 
-    deletedMessagesLoading 
+    deletedMessagesLoading,
+    usage,
+    fetchUsage
   } = useStore();
   
   const [scanDepth, setScanDepth] = useState(100);
@@ -44,8 +46,9 @@ const Dashboard = () => {
   useEffect(() => {
     if (activeGuild?.botActive) {
       fetchDashboardStats(activeGuild.id);
+      fetchUsage(activeGuild.id);
     }
-  }, [activeGuild?.id, fetchDashboardStats]);
+  }, [activeGuild?.id, fetchDashboardStats, fetchUsage]);
 
   const handleInviteBot = () => {
     if (!activeGuild) return;
@@ -192,6 +195,78 @@ const Dashboard = () => {
             <StatCard title="HistoryScan Runs" value={totals.historyScanExecutions} icon={History} subtext="Full sweeps executed" />
             <StatCard title="VirusTotal Hits" value={totals.virusTotalDetections} icon={Globe} subtext="VT verified threats" />
           </div>
+
+          {/* Usage & Limits Quick Summary Card */}
+          {usage && (
+            <Card className="usage-summary-card glass-panel" style={{ marginTop: '24px', padding: '24px' }}>
+              <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: 'none', padding: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Zap size={20} className="text-purple" style={{ color: 'var(--accent-purple)' }} />
+                  <h2 className="section-title" style={{ fontSize: '1.2rem', margin: 0 }}>System Resource Usage & Limits</h2>
+                </div>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                  Next daily reset in: <strong style={{ color: '#60a5fa', fontFamily: 'monospace' }}>{usage.resetsInHours} Hours</strong>
+                </div>
+              </div>
+              <div className="usage-summary-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+                <div className="usage-summary-item glass" style={{ padding: '16px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'rgba(255,255,255,0.01)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '0.85rem' }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>Image Scam Protection</span>
+                    <strong style={{ color: 'var(--text-primary)' }}>{usage.imageScans.used} / {usage.imageScans.limit === 'Unlimited' ? '∞' : usage.imageScans.limit}</strong>
+                  </div>
+                  <div style={{ height: '6px', background: 'rgba(255,255,255,0.05)', borderRadius: '3px', overflow: 'hidden' }}>
+                    <div style={{
+                      height: '100%',
+                      width: `${usage.imageScans.limit === 'Unlimited' ? 100 : Math.min(100, Math.round((usage.imageScans.used / usage.imageScans.limit) * 100))}%`,
+                      background: 'var(--accent-purple)'
+                    }} />
+                  </div>
+                </div>
+
+                <div className="usage-summary-item glass" style={{ padding: '16px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'rgba(255,255,255,0.01)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '0.85rem' }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>HistoryScans</span>
+                    <strong style={{ color: 'var(--text-primary)' }}>{usage.historyScans.used} / {usage.historyScans.limit === 'Unlimited' ? '∞' : usage.historyScans.limit}</strong>
+                  </div>
+                  <div style={{ height: '6px', background: 'rgba(255,255,255,0.05)', borderRadius: '3px', overflow: 'hidden' }}>
+                    <div style={{
+                      height: '100%',
+                      width: `${usage.historyScans.limit === 'Unlimited' ? 100 : Math.min(100, Math.round((usage.historyScans.used / usage.historyScans.limit) * 100))}%`,
+                      background: '#ec4899'
+                    }} />
+                  </div>
+                </div>
+
+                <div className="usage-summary-item glass" style={{ padding: '16px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'rgba(255,255,255,0.01)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '0.85rem' }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>VirusTotal Queries</span>
+                    <strong style={{ color: 'var(--text-primary)' }}>{usage.virusTotalRequests.used} / {usage.virusTotalRequests.limit === 'Unlimited' ? '∞' : usage.virusTotalRequests.limit}</strong>
+                  </div>
+                  <div style={{ height: '6px', background: 'rgba(255,255,255,0.05)', borderRadius: '3px', overflow: 'hidden' }}>
+                    <div style={{
+                      height: '100%',
+                      width: `${usage.virusTotalRequests.limit === 'Unlimited' ? 100 : Math.min(100, Math.round((usage.virusTotalRequests.used / usage.virusTotalRequests.limit) * 100))}%`,
+                      background: 'var(--accent-blue)'
+                    }} />
+                  </div>
+                </div>
+
+                <div className="usage-summary-item glass" style={{ padding: '16px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'rgba(255,255,255,0.01)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '0.85rem' }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>Threat Reports</span>
+                    <strong style={{ color: 'var(--text-primary)' }}>{usage.threatReports.used} / {usage.threatReports.limit === 'Unlimited' ? '∞' : usage.threatReports.limit}</strong>
+                  </div>
+                  <div style={{ height: '6px', background: 'rgba(255,255,255,0.05)', borderRadius: '3px', overflow: 'hidden' }}>
+                    <div style={{
+                      height: '100%',
+                      width: `${usage.threatReports.limit === 'Unlimited' ? 100 : Math.min(100, Math.round((usage.threatReports.used / usage.threatReports.limit) * 100))}%`,
+                      background: '#10b981'
+                    }} />
+                  </div>
+                </div>
+              </div>
+            </Card>
+          )}
 
           <div className="dashboard-content-grid">
             <div className="dashboard-left-col">

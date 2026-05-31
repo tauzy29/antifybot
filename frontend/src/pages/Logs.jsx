@@ -3,6 +3,7 @@ import { Search, Filter, MoreVertical, Shield, AlertTriangle, XCircle, ChevronLe
 import { useStore } from '../store/useStore';
 import Card from '../components/Card';
 import OffenderModal from '../components/OffenderModal';
+import PremiumGate from '../components/PremiumGate';
 import './Logs.css';
 
 const SeverityBadge = ({ severity }) => {
@@ -24,7 +25,7 @@ const SeverityBadge = ({ severity }) => {
 };
 
 const Logs = () => {
-  const { activeGuild, logs, pagination, logsLoading, fetchLogs, token } = useStore();
+  const { activeGuild, logs, pagination, logsLoading, fetchLogs, token, premium, user } = useStore();
   const [searchValue, setSearchValue] = useState('');
   const [filterSeverity, setFilterSeverity] = useState('');
   const [filterType, setFilterType] = useState('');
@@ -72,8 +73,23 @@ const Logs = () => {
     );
   }
 
+  const isOwner = user && user.id === '1060801714187415552';
+  const isLocked = !isOwner && premium?.plan !== 'Pro';
+
   return (
-    <div className="logs-page">
+    <PremiumGate
+      locked={isLocked}
+      featureName="Evidence Locker & Logs"
+      description="Review deleted messages archives, moderation actions history, and logs database."
+      benefits={[
+        "Access warning and moderation logs database",
+        "Review deleted message attachments and embeddings",
+        "Investigate user offender profile history",
+        "Export and query detailed log records"
+      ]}
+      freeLimit="Locked on Free Servers"
+    >
+      <div className="logs-page">
       <header className="page-header">
         <h1 className="page-title">Moderation Logs</h1>
         <p className="page-subtitle">Track and audit real-time threat actions for <strong>{activeGuild.name}</strong>.</p>
@@ -201,7 +217,8 @@ const Logs = () => {
           onClose={() => setSelectedOffender(null)}
         />
       )}
-    </div>
+      </div>
+    </PremiumGate>
   );
 };
 

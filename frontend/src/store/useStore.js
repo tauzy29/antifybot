@@ -59,6 +59,10 @@ export const useStore = create((set, get) => ({
   // Premium State
   premium: null,
   premiumLoading: false,
+  usage: null,
+  usageLoading: false,
+  ownerGuilds: [],
+  ownerGuildsLoading: false,
 
   // Historical Scan State
   scanProgress: { active: false, totalChannels: 0, processedChannels: 0, messagesScanned: 0, detectionsFound: 0, currentChannelName: '', status: 'inactive' },
@@ -171,6 +175,7 @@ export const useStore = create((set, get) => ({
         get().fetchSettings(guild.id);
         get().fetchLogs(guild.id);
         get().fetchPremium(guild.id);
+        get().fetchUsage(guild.id);
         get().fetchScanStatus(guild.id);
         get().fetchDeletedMessages(guild.id);
         get().fetchModerationData(guild.id);
@@ -190,6 +195,7 @@ export const useStore = create((set, get) => ({
           logs: [],
           settings: null,
           premium: null,
+          usage: null,
           moderationData: { punishments: [], warnings: [] },
           auditLogs: [],
           moderatorFeed: [],
@@ -333,18 +339,59 @@ export const useStore = create((set, get) => ({
     }
   },
 
-  subscribeToPlan: async (plan) => {
+  subscribeToPlan: async (plan, provider = 'Stripe') => {
     const { activeGuild } = get();
     if (!activeGuild) return;
 
     try {
-      const data = await apiService.subscribeToPlan(activeGuild.id, plan);
+      const data = await apiService.subscribeToPlan(activeGuild.id, plan, provider);
       get().fetchPremium(activeGuild.id);
-      get().addAlert(`Upgraded server to ${plan} successfully!`, 'success');
+      get().fetchUsage(activeGuild.id);
+      get().addAlert(`Upgraded server to Pro successfully!`, 'success');
       return data.checkoutUrl;
     } catch (error) {
       console.error('Upgrade subscription failed:', error.message);
       get().addAlert('Failed to upgrade subscription', 'error');
+    }
+  },
+
+  fetchUsage: async (guildId) => {
+    if (!guildId) return;
+    set({ usageLoading: true });
+    try {
+      const data = await apiService.fetchUsage(guildId);
+      set({ usage: data, usageLoading: false });
+    } catch (error) {
+      console.error('Fetch usage failed:', error.message);
+      set({ usageLoading: false });
+    }
+  },
+
+  fetchOwnerGuilds: async (search = '') => {
+    set({ ownerGuildsLoading: true });
+    try {
+      const data = await apiService.fetchOwnerGuilds(search);
+      set({ ownerGuilds: data, ownerGuildsLoading: false });
+    } catch (error) {
+      console.error('Fetch owner guilds failed:', error.message);
+      set({ ownerGuildsLoading: false });
+    }
+  },
+
+  managePremiumLicense: async (guildId, action, duration = 'perm') => {
+    try {
+      const data = await apiService.managePremiumLicense(guildId, action, duration);
+      get().addAlert(data.message || 'Premium status updated successfully', 'success');
+      get().fetchOwnerGuilds();
+      const { activeGuild } = get();
+      if (activeGuild && activeGuild.id === guildId) {
+        get().fetchPremium(guildId);
+        get().fetchUsage(guildId);
+      }
+      return data;
+    } catch (error) {
+      console.error('Manage premium failed:', error.message);
+      get().addAlert('Failed to update premium status', 'error');
     }
   },
 
@@ -839,6 +886,16 @@ export const useStore = create((set, get) => ({
       socketConnection.on('scan_failed', (data) => {
         set({ scanProgress: { active: false, status: 'failed', error: data.error } });
         get().addAlert(`❌ Historical scan failed: ${data.error}`, 'error');
+      });
+
+      // Handle real-time premium updates
+      socketConnection.on('premium_status_update', (data) => {
+        const { activeGuild } = get();
+        if (activeGuild && activeGuild.id === data.guildId) {
+          get().fetchPremium(data.guildId);
+          get().fetchUsage(data.guildId);
+          get().addAlert(`⚡ Guild license updated: Server is now on ${data.tier === 'Pro' ? 'ANTIFY PRO' : 'ANTIFY FREE'}!`, 'info');
+        }
       });
 
       // Handle dynamic guild joins/leaves by the bot

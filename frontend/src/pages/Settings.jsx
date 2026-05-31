@@ -17,7 +17,9 @@ const Toggle = ({ enabled, onChange, disabled }) => (
 );
 
 const Settings = () => {
-  const { activeGuild, settings, settingsLoading, updateSettings, addKeyword, removeKeyword } = useStore();
+  const { activeGuild, settings, settingsLoading, updateSettings, addKeyword, removeKeyword, premium, user, addAlert } = useStore();
+  const isOwner = user && user.id === '1060801714187415552';
+  const isPremium = isOwner || premium?.plan === 'Pro';
   const [newKeyword, setNewKeyword] = useState('');
   const [newRole, setNewRole] = useState('');
   const [newUser, setNewUser] = useState('');
@@ -149,14 +151,14 @@ const Settings = () => {
                   />
                 </div>
 
-                <div className="setting-item">
+                 <div className="setting-item">
                   <div className="setting-info">
-                    <h3>OCR Image Scanner</h3>
+                    <h3>OCR Image Scanner {!isPremium && <span className="settings-pro-badge" style={{ fontSize: '0.6rem', color: 'var(--accent-purple)', background: 'rgba(139,92,246,0.1)', padding: '2px 6px', borderRadius: '4px', marginLeft: '6px', border: '1px solid rgba(139,92,246,0.2)' }}>PRO</span>}</h3>
                     <p>Extract and scan text within image attachments (catches screenshot giveaways).</p>
                   </div>
                   <Toggle 
-                    enabled={currentSettings.ocrEnabled} 
-                    onChange={() => handleToggle('ocrEnabled')} 
+                    enabled={isPremium ? currentSettings.ocrEnabled : false} 
+                    onChange={isPremium ? () => handleToggle('ocrEnabled') : () => addAlert('OCR Image Scanning is an ANTIFY PRO feature.', 'warning')} 
                   />
                 </div>
 

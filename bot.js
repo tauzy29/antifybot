@@ -93,8 +93,16 @@ function hasBadDomain(url) {
 }
 
 // VirusTotal Scan
-async function scanUrl(url) {
+async function scanUrl(url, guildId) {
   try {
+    if (!guildId) return false;
+    const { checkAndIncrementUsage } = require('./backend/helpers/usage');
+    const vtCheck = await checkAndIncrementUsage(guildId, 'virusTotalRequests');
+    if (!vtCheck.allowed) {
+      console.log(`[Bot] Daily VirusTotal limit reached for guild ${guildId}. Skipping VT lookup.`);
+      return false;
+    }
+
     const submit = await axios.post(
       'https://www.virustotal.com/api/v3/urls',
       new URLSearchParams({ url }),
@@ -356,7 +364,7 @@ client.on('messageCreate', async (message) => {
 
         // VirusTotal
         if (settings.virusTotalEnabled !== false) {
-          const malicious = await scanUrl(url);
+          const malicious = await scanUrl(url, guildId);
 
           if (malicious) {
             return punish(
@@ -376,6 +384,12 @@ client.on('messageCreate', async (message) => {
   // IMAGE OCR SCAN
   // ==========================
   if (settings.ocrEnabled && message.attachments.size > 0) {
+    const { checkAndIncrementUsage } = require('./backend/helpers/usage');
+    const ocrCheck = await checkAndIncrementUsage(guildId, 'imageScans');
+    if (!ocrCheck.allowed) {
+      console.log(`[Bot] Daily image scan limit reached for guild ${guildId}. Skipping OCR scan.`);
+      return;
+    }
     for (const attachment of message.attachments.values()) {
       if (
         attachment.contentType?.startsWith('image')
@@ -421,7 +435,7 @@ client.on('messageCreate', async (message) => {
               }
 
               if (settings.virusTotalEnabled !== false) {
-                const malicious = await scanUrl(url);
+                const malicious = await scanUrl(url, guildId);
 
                 if (malicious) {
                   return punish(

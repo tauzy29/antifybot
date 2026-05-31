@@ -18,6 +18,8 @@ const Logs = lazy(() => import('./pages/Logs'));
 const Moderation = lazy(() => import('./pages/Moderation'));
 const Settings = lazy(() => import('./pages/Settings'));
 const Premium = lazy(() => import('./pages/Premium'));
+const UsageLimits = lazy(() => import('./pages/UsageLimits'));
+const OwnerPanel = lazy(() => import('./pages/OwnerPanel'));
 
 function App() {
   return (
@@ -99,6 +101,22 @@ function App() {
               <Route
                 path="premium"
                 element={<Premium />}
+              />
+
+              {/* =====================
+                  USAGE & LIMITS
+              ====================== */}
+              <Route
+                path="usage-limits"
+                element={<UsageLimits />}
+              />
+
+              {/* =====================
+                  OWNER PANEL
+              ====================== */}
+              <Route
+                path="owner-panel"
+                element={<OwnerPanel />}
               />
             </Route>
 

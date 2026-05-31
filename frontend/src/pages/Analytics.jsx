@@ -3,6 +3,7 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { Mic, MessageCircle, MessageSquare, Calendar, Clock, Activity, ShieldAlert, BarChart3 } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import Card from '../components/Card';
+import PremiumGate from '../components/PremiumGate';
 import './Analytics.css';
 
 const StatCard = ({ title, value, icon: Icon, subtext, color = "purple" }) => (
@@ -21,7 +22,7 @@ const StatCard = ({ title, value, icon: Icon, subtext, color = "purple" }) => (
 );
 
 const Analytics = () => {
-  const { activeGuild, stats, statsLoading } = useStore();
+  const { activeGuild, stats, statsLoading, premium, user } = useStore();
 
   if (!activeGuild) {
     return (
@@ -117,8 +118,23 @@ const Analytics = () => {
 
   const COLORS = ['#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#6366f1', '#14b8a6', '#f43f5e'];
 
+  const isOwner = user && user.id === '1060801714187415552';
+  const isLocked = !isOwner && premium?.plan !== 'Pro';
+
   return (
-    <div className="analytics-page">
+    <PremiumGate
+      locked={isLocked}
+      featureName="Threat Analytics"
+      description="Access deep insights, scan activity trends, and moderation metrics history."
+      benefits={[
+        "Historical message activity tracking",
+        "Threat classification charts",
+        "VirusTotal hit rates telemetry",
+        "Custom channels scan breakdown"
+      ]}
+      freeLimit="Locked on Free Servers"
+    >
+      <div className="analytics-page">
       <header className="page-header">
         <h1 className="page-title">Channel Intelligence Analytics</h1>
         <p className="page-subtitle">Deep dive into threat logs, OCR metrics, and multi-channel telemetry for <strong>{activeGuild.name}</strong>.</p>
@@ -329,7 +345,8 @@ const Analytics = () => {
           </div>
         </>
       )}
-    </div>
+      </div>
+    </PremiumGate>
   );
 };
 

@@ -183,9 +183,17 @@ function shouldBypass(message, member, settings) {
 }
 
 // VirusTotal Scan
-async function scanUrl(url) {
+async function scanUrl(url, guildId) {
   try {
     if (!process.env.VT_API_KEY) return false;
+    if (guildId) {
+      const { checkAndIncrementUsage } = require('./usage');
+      const vtCheck = await checkAndIncrementUsage(guildId, 'virusTotalRequests');
+      if (!vtCheck.allowed) {
+        console.log(`[Scanner] Daily VirusTotal limit reached for guild ${guildId}. Skipping VT lookup.`);
+        return false;
+      }
+    }
     const submit = await axios.post(
       'https://www.virustotal.com/api/v3/urls',
       new URLSearchParams({ url }),
@@ -281,7 +289,7 @@ async function runDetectionPipeline(message, settings) {
           }
         }
 
-        const malicious = await scanUrl(url);
+        const malicious = await scanUrl(url, settings.guildId);
         if (malicious) {
           return {
             type: 'Phishing Link',
@@ -302,6 +310,16 @@ async function runDetectionPipeline(message, settings) {
   // IMAGE OCR SCAN
   // ==========================
   if (settings.ocrEnabled && message.attachments && message.attachments.size > 0) {
+    const { checkAndIncrementUsage } = require('./usage');
+    const ocrCheck = await checkAndIncrementUsage(settings.guildId, 'imageScans');
+    if (!ocrCheck.allowed) {
+      console.log(`[Scanner] Daily image scan limit reached for guild ${settings.guildId}. Skipping OCR.`);
+      return {
+        success: false,
+        error: "Daily image scan limit reached",
+        upgradeRequired: true
+      };
+    }
     for (const attachment of message.attachments.values()) {
       const isImg = attachment.contentType?.startsWith('image') || 
                     attachment.name?.match(/\.(png|jpg|jpeg|gif|webp)$/i);
@@ -355,7 +373,7 @@ async function runDetectionPipeline(message, settings) {
                 }
               }
 
-              const malicious = await scanUrl(url);
+              const malicious = await scanUrl(url, settings.guildId);
               if (malicious) {
                 return {
                   type: 'Scam Image',

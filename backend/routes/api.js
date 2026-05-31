@@ -1,7 +1,7 @@
 const router = require('express').Router();
 const axios = require('axios');
 const { ensureAuthenticated } = require('../middleware/auth');
-const { Settings, Log, Punishment, Warning, AuditLog, Subscription, DetectionLog, UserInfraction, GuildAnalytics, DeletedMessage, HistoricalScanJob, Notification, HistoryScan, ThreatEvent, ModerationAction, DashboardStats } = require('../models');
+const { Settings, Log, Punishment, Warning, AuditLog, Subscription, DetectionLog, UserInfraction, GuildAnalytics, DeletedMessage, HistoricalScanJob, Notification, HistoryScan, ThreatEvent, ModerationAction, DashboardStats, UsageStats, License } = require('../models');
 const { activeScans, startHistoricalScan, cancelHistoricalScan, resumeHistoricalScan } = require('../helpers/scanner');
 const { recalculateDashboardStats } = require('../helpers/statsUpdater');
 
@@ -41,31 +41,74 @@ const checkGuildAdminPermission = async (req, res, next) => {
   next();
 };
 
+const checkPremiumOrOwnerPermission = async (req, res, next) => {
+  try {
+    const guildId = req.params.guildId || req.query.guildId;
+    if (!guildId) {
+      return next();
+    }
+
+    const { isPremiumGuild, OWNER_ID } = require('../helpers/usage');
+
+    // 1. Global Owner bypasses all locks
+    const isOwner = req.user && req.user.discordId === OWNER_ID;
+    if (isOwner) {
+      return next();
+    }
+
+    // 2. Check if the guild is premium
+    const isPremium = await isPremiumGuild(guildId);
+    if (isPremium) {
+      return next();
+    }
+
+    // 3. Otherwise, return locked payload
+    return res.json({
+      locked: true,
+      error: 'This feature is locked. ANTIFY PRO is required.',
+      upgradeRequired: true
+    });
+  } catch (error) {
+    console.error('Error in premium gating middleware:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+};
+
 // Route-level middleware binding to enforce auth & guild-level admin boundaries
-router.use('/logs/:guildId', ensureAuthenticated, checkGuildAdminPermission);
+router.use('/logs/:guildId', ensureAuthenticated, checkGuildAdminPermission, checkPremiumOrOwnerPermission);
 router.use('/logs', ensureAuthenticated, (req, res, next) => {
-  if (req.query.guildId) return checkGuildAdminPermission(req, res, next);
+  if (req.query.guildId) {
+    return checkGuildAdminPermission(req, res, (err) => {
+      if (err) return next(err);
+      return checkPremiumOrOwnerPermission(req, res, next);
+    });
+  }
   next();
 });
-router.use('/deleted-messages', ensureAuthenticated, checkGuildAdminPermission);
+router.use('/deleted-messages', ensureAuthenticated, checkGuildAdminPermission, checkPremiumOrOwnerPermission);
 router.use('/detections', ensureAuthenticated, checkGuildAdminPermission);
 router.use('/infractions', ensureAuthenticated, checkGuildAdminPermission);
 router.use('/users/:guildId/:userId', ensureAuthenticated, checkGuildAdminPermission);
 router.use('/punishments/:guildId', ensureAuthenticated, checkGuildAdminPermission);
 router.use('/settings/:guildId', ensureAuthenticated, checkGuildAdminPermission);
-router.use('/analytics/:guildId', ensureAuthenticated, checkGuildAdminPermission);
+router.use('/analytics/:guildId', ensureAuthenticated, checkGuildAdminPermission, checkPremiumOrOwnerPermission);
 router.use('/analytics', ensureAuthenticated, (req, res, next) => {
-  if (req.query.guildId) return checkGuildAdminPermission(req, res, next);
+  if (req.query.guildId) {
+    return checkGuildAdminPermission(req, res, (err) => {
+      if (err) return next(err);
+      return checkPremiumOrOwnerPermission(req, res, next);
+    });
+  }
   next();
 });
-router.use('/scan/:guildId', ensureAuthenticated, checkGuildAdminPermission);
-router.use('/scan/status/:guildId', ensureAuthenticated, checkGuildAdminPermission);
+router.use('/scan/:guildId', ensureAuthenticated, checkGuildAdminPermission, checkPremiumOrOwnerPermission);
+router.use('/scan/status/:guildId', ensureAuthenticated, checkGuildAdminPermission, checkPremiumOrOwnerPermission);
 router.use('/premium/:guildId', ensureAuthenticated, checkGuildAdminPermission);
-router.use('/moderation/:guildId', ensureAuthenticated, checkGuildAdminPermission);
-router.use('/notifications/:guildId', ensureAuthenticated, checkGuildAdminPermission);
-router.use('/history-scans/:guildId', ensureAuthenticated, checkGuildAdminPermission);
+router.use('/moderation/:guildId', ensureAuthenticated, checkGuildAdminPermission, checkPremiumOrOwnerPermission);
+router.use('/notifications/:guildId', ensureAuthenticated, checkGuildAdminPermission, checkPremiumOrOwnerPermission);
+router.use('/history-scans/:guildId', ensureAuthenticated, checkGuildAdminPermission, checkPremiumOrOwnerPermission);
 router.use('/dashboard-stats/:guildId', ensureAuthenticated, checkGuildAdminPermission);
-router.use('/moderation-center/:guildId', ensureAuthenticated, checkGuildAdminPermission);
+router.use('/moderation-center/:guildId', ensureAuthenticated, checkGuildAdminPermission, checkPremiumOrOwnerPermission);
 router.use('/server-management/:guildId', ensureAuthenticated, checkGuildAdminPermission);
 
 // ==============================
@@ -884,23 +927,45 @@ router.get('/scan/status/:guildId', ensureAuthenticated, async (req, res) => {
 router.get('/premium/:guildId', ensureAuthenticated, async (req, res) => {
   try {
     const { guildId } = req.params;
-    let sub = await Subscription.findOne({ guildId });
-    if (!sub) {
-      sub = new Subscription({ guildId, plan: 'Basic', status: 'active' });
-      await sub.save();
+    const { isPremiumGuild } = require('../helpers/usage');
+    
+    const isPremium = await isPremiumGuild(guildId);
+    
+    const license = await License.findOne({ guildId });
+    const sub = await Subscription.findOne({ guildId });
+
+    let plan = 'Free';
+    let expiresAt = null;
+    let source = 'Manual';
+
+    if (license && license.plan === 'Pro') {
+      if (!license.expiresAt || new Date(license.expiresAt) > new Date()) {
+        plan = 'Pro';
+        expiresAt = license.expiresAt;
+        source = license.source;
+      }
+    } else if (sub && (sub.plan === 'Pro' || sub.plan === 'Enterprise') && sub.status === 'active') {
+      if (!sub.expiresAt || new Date(sub.expiresAt) > new Date()) {
+        plan = 'Pro';
+        expiresAt = sub.expiresAt;
+        source = 'Stripe';
+      }
     }
+
     res.json({
-      plan: sub.plan,
-      status: sub.status,
-      expiresAt: sub.expiresAt,
+      plan,
+      isPremium,
+      expiresAt,
+      source,
       features: {
-        ocrLimit: sub.plan === 'Enterprise' ? -1 : (sub.plan === 'Pro' ? 10000 : 500),
-        advancedAI: sub.plan !== 'Basic',
-        customKeywords: sub.plan !== 'Basic',
-        dedicatedSupport: sub.plan === 'Enterprise'
+        ocrLimit: plan === 'Pro' ? -1 : 10,
+        advancedAI: plan === 'Pro',
+        customKeywords: plan === 'Pro',
+        dedicatedSupport: plan === 'Pro'
       }
     });
   } catch (error) {
+    console.error('Error fetching subscription:', error);
     res.status(500).json({ error: 'Internal Server Error' });
   }
 });
@@ -908,20 +973,49 @@ router.get('/premium/:guildId', ensureAuthenticated, async (req, res) => {
 router.post('/premium/:guildId/subscribe', ensureAuthenticated, async (req, res) => {
   try {
     const { guildId } = req.params;
-    const { plan } = req.body;
+    const { plan, provider = 'Stripe' } = req.body;
 
-    let sub = await Subscription.findOne({ guildId });
-    if (!sub) sub = new Subscription({ guildId });
-    sub.plan = plan;
-    sub.status = 'active';
-    sub.expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-    await sub.save();
+    if (!['Pro'].includes(plan)) {
+      return res.status(400).json({ error: 'Invalid subscription plan' });
+    }
+
+    // Payment integration redirect mock URL
+    let checkoutUrl = `https://checkout.stripe.com/pay/cs_test_mock_${Date.now()}`;
+    if (provider === 'PayPal') {
+      checkoutUrl = `https://paypal.com/checkout/mock_${Date.now()}`;
+    } else if (provider === 'DiscordStore') {
+      checkoutUrl = `https://discord.com/store/mock_${Date.now()}`;
+    }
+
+    // Create/update License record
+    let license = await License.findOne({ guildId });
+    if (!license) {
+      license = new License({ guildId });
+    }
+    license.plan = 'Pro';
+    license.expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days trial
+    license.source = provider;
+    await license.save();
+
+    // Update Guild model cache
+    let guild = await Guild.findOne({ guildId });
+    if (guild) {
+      guild.premiumStatus = 'Pro';
+      await guild.save();
+    }
+
+    // Emit live update
+    const client = req.app.get('discordClient');
+    if (client && client.io) {
+      client.io.emit('premium_status_update', { guildId, isPremium: true, tier: 'Pro' });
+    }
 
     res.json({
-      checkoutUrl: `https://checkout.stripe.com/pay/cs_test_mock_${Date.now()}`,
-      message: `Simulated subscription success for ${plan}!`
+      checkoutUrl,
+      message: `Successfully simulated ${provider} payment checkout and generated a Pro license!`
     });
   } catch (error) {
+    console.error('Mock checkout error:', error);
     res.status(500).json({ error: 'Internal Server Error' });
   }
 });
@@ -1899,6 +1993,203 @@ router.get('/server-management/:guildId', ensureAuthenticated, async (req, res) 
       lastActivity
     });
   } catch (error) {
+    console.error('Error fetching server-management stats:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+// ==============================
+// PREMIUM LIMITS & LICENSING ENDPOINTS
+// ==============================
+
+// Fetch current daily usage and limits for a guild
+router.get('/premium/:guildId/usage', ensureAuthenticated, async (req, res) => {
+  try {
+    const { guildId } = req.params;
+    const { getUsageForDay } = require('../helpers/usage');
+    const usage = await getUsageForDay(guildId);
+    res.json(usage);
+  } catch (error) {
+    console.error('Error fetching usage stats:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+// Export threat report as CSV (limited to 5 per day on Free tier)
+router.get('/premium/:guildId/export', ensureAuthenticated, async (req, res) => {
+  try {
+    const { guildId } = req.params;
+    const { checkAndIncrementUsage } = require('../helpers/usage');
+
+    // Check and increment threat reports usage limit
+    const usageCheck = await checkAndIncrementUsage(guildId, 'threatReports');
+    if (!usageCheck.allowed) {
+      return res.status(429).json({
+        success: false,
+        error: 'Daily threat reports export limit reached',
+        upgradeRequired: true
+      });
+    }
+
+    // Fetch logs
+    const logs = await Log.find({ guildId }).sort({ createdAt: -1 }).limit(1000);
+    
+    // Generate CSV
+    let csv = 'User,Date,Threat Type,Severity,Action Taken,Reason,Details\n';
+    logs.forEach(log => {
+      const user = `"${(log.username || '').replace(/"/g, '""')}"`;
+      const date = `"${new Date(log.createdAt || log.timestamp).toISOString()}"`;
+      const category = `"${(log.detectionType || log.actionType || 'Unknown').replace(/"/g, '""')}"`;
+      const severity = `"${(log.severity || 'medium').replace(/"/g, '""')}"`;
+      const action = `"${(log.actionTaken || 'None').replace(/"/g, '""')}"`;
+      const reason = `"${(log.reason || '').replace(/"/g, '""')}"`;
+      const details = `"${(log.details || '').replace(/"/g, '""')}"`;
+      csv += `${user},${date},${category},${severity},${action},${reason},${details}\n`;
+    });
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename=antify_threat_report_${guildId}.csv`);
+    res.status(200).send(csv);
+  } catch (error) {
+    console.error('Error exporting logs:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+// ==============================
+// OWNER PREMIUM CONTROL PANEL ENDPOINTS
+// ==============================
+
+// Search and retrieve all guilds with license plans for the owner panel
+router.get('/owner/guilds', ensureAuthenticated, async (req, res) => {
+  try {
+    const { OWNER_ID, isPremiumGuild } = require('../helpers/usage');
+    if (req.user.discordId !== OWNER_ID) {
+      return res.status(403).json({ error: 'Forbidden: Global Owner access required' });
+    }
+
+    const { search = '' } = req.query;
+    let query = {};
+    if (search) {
+      query = { name: { $regex: search, $options: 'i' } };
+    }
+
+    const guilds = await Guild.find(query).limit(100);
+    const client = req.app.get('discordClient');
+
+    const result = await Promise.all(guilds.map(async (g) => {
+      const license = await License.findOne({ guildId: g.guildId });
+      const sub = await Subscription.findOne({ guildId: g.guildId });
+
+      let tier = 'Free';
+      let expiresAt = null;
+      let source = 'Manual';
+
+      if (license && license.plan === 'Pro') {
+        if (!license.expiresAt || new Date(license.expiresAt) > new Date()) {
+          tier = 'Pro';
+          expiresAt = license.expiresAt;
+          source = license.source;
+        }
+      } else if (sub && (sub.plan === 'Pro' || sub.plan === 'Enterprise') && sub.status === 'active') {
+        if (!sub.expiresAt || new Date(sub.expiresAt) > new Date()) {
+          tier = 'Pro';
+          expiresAt = sub.expiresAt;
+          source = 'Stripe';
+        }
+      }
+
+      const isOnline = client ? client.guilds.cache.has(g.guildId) : false;
+
+      return {
+        guildId: g.guildId,
+        name: g.name,
+        icon: g.icon ? `https://cdn.discordapp.com/icons/${g.guildId}/${g.icon}.png` : null,
+        ownerId: g.ownerId,
+        tier,
+        expiresAt,
+        source,
+        isOnline
+      };
+    }));
+
+    res.json(result);
+  } catch (error) {
+    console.error('Error fetching owner guilds:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+// Grant or remove premium license for a guild
+router.post('/owner/premium', ensureAuthenticated, async (req, res) => {
+  try {
+    const { OWNER_ID } = require('../helpers/usage');
+    if (req.user.discordId !== OWNER_ID) {
+      return res.status(403).json({ error: 'Forbidden: Global Owner access required' });
+    }
+
+    const { guildId, action, duration } = req.body;
+    if (!guildId) {
+      return res.status(400).json({ error: 'Guild ID is required' });
+    }
+
+    if (action === 'remove') {
+      await License.deleteOne({ guildId });
+      
+      let guild = await Guild.findOne({ guildId });
+      if (guild) {
+        guild.premiumStatus = 'Basic';
+        await guild.save();
+      }
+
+      // Socket broadcast
+      const client = req.app.get('discordClient');
+      if (client && client.io) {
+        client.io.emit('premium_status_update', { guildId, isPremium: false, tier: 'Free' });
+      }
+
+      return res.json({ success: true, message: 'Premium license removed' });
+    }
+
+    // Grant
+    let expiresAt = null;
+    if (duration === '7d') {
+      expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    } else if (duration === '30d') {
+      expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    } else if (duration === '90d') {
+      expiresAt = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000);
+    }
+
+    let license = await License.findOne({ guildId });
+    if (!license) {
+      license = new License({ guildId });
+    }
+    license.plan = 'Pro';
+    license.expiresAt = expiresAt;
+    license.grantedBy = req.user.discordId;
+    license.source = 'Manual';
+    await license.save();
+
+    let guild = await Guild.findOne({ guildId });
+    if (guild) {
+      guild.premiumStatus = 'Pro';
+      await guild.save();
+    }
+
+    // Socket broadcast
+    const client = req.app.get('discordClient');
+    if (client && client.io) {
+      client.io.emit('premium_status_update', { guildId, isPremium: true, tier: 'Pro' });
+    }
+
+    res.json({
+      success: true,
+      message: `Premium status granted successfully (${duration})`,
+      expiresAt
+    });
+  } catch (error) {
+    console.error('Error managing premium license:', error);
     res.status(500).json({ error: 'Internal Server Error' });
   }
 });

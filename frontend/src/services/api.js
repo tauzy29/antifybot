@@ -120,9 +120,40 @@ export const apiService = {
     }
   },
 
-  subscribeToPlan: async (guildId, plan) => {
+  subscribeToPlan: async (guildId, plan, provider = 'Stripe') => {
     try {
-      const response = await axios.post(`${API_BASE_URL}/premium/${guildId}/subscribe`, { plan });
+      const response = await axios.post(`${API_BASE_URL}/premium/${guildId}/subscribe`, { plan, provider });
+      return handleResponse(response);
+    } catch (error) {
+      return handleError(error);
+    }
+  },
+
+  fetchUsage: async (guildId) => {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/premium/${guildId}/usage`);
+      return handleResponse(response);
+    } catch (error) {
+      return handleError(error);
+    }
+  },
+
+  exportThreatReportUrl: (guildId) => {
+    return `${API_BASE_URL}/premium/${guildId}/export`;
+  },
+
+  fetchOwnerGuilds: async (search = '') => {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/owner/guilds?search=${encodeURIComponent(search)}`);
+      return handleResponse(response);
+    } catch (error) {
+      return handleError(error);
+    }
+  },
+
+  managePremiumLicense: async (guildId, action, duration = 'perm') => {
+    try {
+      const response = await axios.post(`${API_BASE_URL}/owner/premium`, { guildId, action, duration });
       return handleResponse(response);
     } catch (error) {
       return handleError(error);

@@ -12,7 +12,9 @@ const TopNav = () => {
     notifications,
     notificationsLoading,
     markAllNotificationsRead,
-    markNotificationRead
+    markNotificationRead,
+    premium,
+    addAlert
   } = useStore();
 
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -68,6 +70,9 @@ const TopNav = () => {
     : 'https://cdn.discordapp.com/embed/avatars/0.png';
 
   const unreadCount = notifications.filter(n => !n.read).length;
+  
+  const isOwner = user && user.id === '1060801714187415552';
+  const isLocked = !isOwner && premium?.plan !== 'Pro';
 
   return (
     <header className="topnav glass">
@@ -157,10 +162,17 @@ const TopNav = () => {
           <div className="notifications-container" ref={notificationsDropdownRef}>
             <button 
               className={`icon-btn action-btn ${notificationsOpen ? 'active' : ''}`}
-              onClick={() => setNotificationsOpen(!notificationsOpen)}
+              onClick={() => {
+                if (isLocked) {
+                  addAlert('🔒 Advanced Notifications require ANTIFY PRO.', 'warning');
+                } else {
+                  setNotificationsOpen(!notificationsOpen);
+                }
+              }}
             >
               <Bell size={20} />
-              {unreadCount > 0 && <span className="nav-badge">{unreadCount}</span>}
+              {!isLocked && unreadCount > 0 && <span className="nav-badge">{unreadCount}</span>}
+              {isLocked && <span className="nav-badge" style={{ background: '#64748b', fontSize: '0.6rem' }}>🔒</span>}
             </button>
 
             {notificationsOpen && (
@@ -215,7 +227,13 @@ const TopNav = () => {
             />
             <div className="user-info">
               <span className="user-name">{user.username}</span>
-              <span className="user-role">Administrator</span>
+              {user.id === '1060801714187415552' ? (
+                <span className="user-role badge-pro-plus">ANTIFY PRO+</span>
+              ) : (activeGuild && activeGuild.botActive && premium?.plan === 'Pro' ? (
+                <span className="user-role badge-pro">ANTIFY PRO</span>
+              ) : (
+                <span className="user-role badge-free">ANTIFY FREE</span>
+              ))}
             </div>
           </div>
         )}

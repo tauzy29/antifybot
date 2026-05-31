@@ -8,6 +8,7 @@ import {
 import { useStore } from '../store/useStore';
 import Card from '../components/Card';
 import Button from '../components/Button';
+import PremiumGate from '../components/PremiumGate';
 import './Moderation.css';
 
 // Dynamic Countdown Timer Component for timeouts
@@ -71,7 +72,9 @@ const Moderation = () => {
     editPunishment,
     revokePunishment,
     markFalsePositive,
-    addAlert
+    addAlert,
+    premium,
+    user
   } = useStore();
 
   const [activeSubTab, setActiveSubTab] = useState('actions');
@@ -216,8 +219,23 @@ const Moderation = () => {
     { id: 'auditlogs', label: 'Audit Logs', icon: FileText }
   ];
 
+  const isOwner = user && user.id === '1060801714187415552';
+  const isLocked = !isOwner && premium?.plan !== 'Pro';
+
   return (
-    <div className="moderation-page">
+    <PremiumGate
+      locked={isLocked}
+      featureName="Moderation Center"
+      description="Manage timeouts, warnings, appeals, and false positives in real time."
+      benefits={[
+        "Access history scan results table",
+        "Inspect and appeal warnings, kicks, and bans",
+        "Investigate attachments and OCR content inside the Evidence Viewer",
+        "Review false positive flags and restore messages"
+      ]}
+      freeLimit="Locked on Free Servers"
+    >
+      <div className="moderation-page">
       <header className="page-header">
         <h1 className="page-title">Moderation Operations Center</h1>
         <p className="page-subtitle">Unified threat response, historical analytics, and forensic evidence tracking for <strong>{activeGuild.name}</strong>.</p>
@@ -1129,8 +1147,10 @@ const Moderation = () => {
           )}
         </div>
       </div>
-    </div>
+      </div>
+    </PremiumGate>
   );
 };
 
 export default Moderation;
+

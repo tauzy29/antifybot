@@ -507,6 +507,31 @@ const DashboardStatsSchema = new mongoose.Schema({
   lastUpdated: { type: Date, default: Date.now }
 }, { timestamps: true });
 
+// ==============================
+// USAGE STATS SCHEMA
+// ==============================
+const UsageStatsSchema = new mongoose.Schema({
+  guildId: { type: String, required: true, index: true },
+  date: { type: Date, required: true, index: true },
+  imageScans: { type: Number, default: 0 },
+  historyScans: { type: Number, default: 0 },
+  virusTotalRequests: { type: Number, default: 0 },
+  threatReports: { type: Number, default: 0 }
+}, { timestamps: true });
+
+UsageStatsSchema.index({ guildId: 1, date: 1 }, { unique: true });
+
+// ==============================
+// LICENSE SCHEMA
+// ==============================
+const LicenseSchema = new mongoose.Schema({
+  guildId: { type: String, required: true, unique: true, index: true },
+  plan: { type: String, enum: ['Free', 'Pro'], default: 'Free' },
+  expiresAt: { type: Date }, // null for permanent
+  grantedBy: { type: String }, // Discord ID of admin
+  source: { type: String, enum: ['Manual', 'Stripe', 'PayPal', 'DiscordStore'], default: 'Manual' }
+}, { timestamps: true });
+
 module.exports = {
   User: mongoose.model('User', UserSchema),
   Guild: mongoose.model('Guild', GuildSchema),
@@ -525,5 +550,7 @@ module.exports = {
   HistoryScan: mongoose.model('HistoryScan', HistoryScanSchema),
   ThreatEvent: mongoose.model('ThreatEvent', ThreatEventSchema),
   ModerationAction: mongoose.model('ModerationAction', ModerationActionSchema),
-  DashboardStats: mongoose.model('DashboardStats', DashboardStatsSchema)
+  DashboardStats: mongoose.model('DashboardStats', DashboardStatsSchema),
+  UsageStats: mongoose.model('UsageStats', UsageStatsSchema),
+  License: mongoose.model('License', LicenseSchema)
 };
