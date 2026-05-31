@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Shield, Hourglass, Ban, AlertTriangle, ShieldAlert, CheckCircle, 
   Trash2, Eye, Clock, RotateCcw, ShieldCheck, FileText, Search, History,
-  ArrowRight, ShieldX, Check, AlertCircle, ArrowLeft, ArrowRightSquare
+  ArrowRight, ShieldX, Check, AlertCircle, ArrowLeft, ArrowRightSquare, Globe
 } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import Card from '../components/Card';
