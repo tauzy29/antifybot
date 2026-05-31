@@ -160,7 +160,7 @@ const TopNav = () => {
               onClick={() => setNotificationsOpen(!notificationsOpen)}
             >
               <Bell size={20} />
-              {unreadCount > 0 && <span className="badge">{unreadCount}</span>}
+              {unreadCount > 0 && <span className="nav-badge">{unreadCount}</span>}
             </button>
 
             {notificationsOpen && (
