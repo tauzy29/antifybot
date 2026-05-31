@@ -10,6 +10,9 @@ const socketIo = require('socket.io');
 const cors = require('cors');
 const session = require('express-session');
 const passport = require('passport');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+const MongoStore = require('connect-mongo');
 
 const connectDB = require('./db');
 
@@ -43,6 +46,21 @@ const apiRoutes = require('./routes/api');
 const app = express();
 
 const server = http.createServer(app);
+
+// Use helmet for secure HTTP headers
+app.use(helmet({
+  contentSecurityPolicy: false, // Disabled to avoid issues with CDN resources like Discord avatars
+}));
+
+// Apply rate limiter to all API endpoints
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 150, // limit each IP to 150 requests per windowMs
+  message: { error: 'Too many requests from this IP, please try again after 15 minutes.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use('/api', apiLimiter);
 
 // ==============================
 // ENV VARIABLES
@@ -99,23 +117,18 @@ app.use(express.urlencoded({
 // ==============================
 
 app.use(session({
-
-  secret:
-    process.env.SESSION_SECRET ||
-    'antify_super_secret',
-
+  secret: process.env.SESSION_SECRET || 'antify_super_secret',
   resave: false,
-
   saveUninitialized: false,
-
+  store: MongoStore.create({
+    mongoUrl: process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/antify',
+    collectionName: 'sessions',
+    ttl: 7 * 24 * 60 * 60 // 7 days
+  }),
   cookie: {
-
     secure: false, // true only on HTTPS production
-
     httpOnly: true,
-
-    maxAge:
-      7 * 24 * 60 * 60 * 1000
+    maxAge: 7 * 24 * 60 * 60 * 1000
   }
 }));
 

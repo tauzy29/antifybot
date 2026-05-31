@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Shield, Eye, Settings as SettingsIcon, Save, Plus } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Shield, Eye, Settings as SettingsIcon, Save, Plus, Volume2, UserCheck, MessageSquare } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import Card from '../components/Card';
 import Button from '../components/Button';
@@ -10,6 +10,7 @@ const Toggle = ({ enabled, onChange, disabled }) => (
     className={`toggle-switch ${enabled ? 'active' : ''}`}
     onClick={onChange}
     disabled={disabled}
+    type="button"
   >
     <div className="toggle-thumb" />
   </button>
@@ -22,6 +23,22 @@ const Settings = () => {
   const [newUser, setNewUser] = useState('');
   const [newChannel, setNewChannel] = useState('');
   const [newAnnChannel, setNewAnnChannel] = useState('');
+
+  // Local state for text-input configurations (saved on Save click)
+  const [loggingChannel, setLoggingChannel] = useState('');
+  const [welcomeChannel, setWelcomeChannel] = useState('');
+  const [welcomeText, setWelcomeText] = useState('');
+  const [autorole, setAutorole] = useState('');
+
+  // Sync inputs with settings data
+  useEffect(() => {
+    if (settings) {
+      setLoggingChannel(settings.loggingChannelId || '');
+      setWelcomeChannel(settings.welcomeChannelId || '');
+      setWelcomeText(settings.welcomeMessageText || 'Welcome {user} to the server! Make sure to verify.');
+      setAutorole(settings.autoroleId || '');
+    }
+  }, [settings]);
 
   if (!activeGuild) {
     return (
@@ -46,6 +63,16 @@ const Settings = () => {
     updateSettings({ [key]: !settings[key] });
   };
 
+  const handleSaveTextSettings = (e) => {
+    e.preventDefault();
+    updateSettings({
+      loggingChannelId: loggingChannel,
+      welcomeChannelId: welcomeChannel,
+      welcomeMessageText: welcomeText,
+      autoroleId: autorole
+    });
+  };
+
   const handleKeywordAdd = (e) => {
     e.preventDefault();
     if (newKeyword.trim()) {
@@ -66,15 +93,24 @@ const Settings = () => {
     whitelistChannels: [],
     trustedRoles: [],
     trustedUsers: [],
-    announcementChannels: []
+    announcementChannels: [],
+    antiScamEnabled: true,
+    antiPhishingEnabled: true,
+    virusTotalEnabled: true,
+    loggingChannelId: '',
+    welcomeEnabled: false,
+    welcomeChannelId: '',
+    welcomeMessageText: 'Welcome {user} to the server! Make sure to verify.',
+    roleManagementEnabled: false,
+    autoroleId: ''
   };
 
   return (
     <div className="settings-page">
       <header className="page-header flex-between">
         <div>
-          <h1 className="page-title">Server Settings</h1>
-          <p className="page-subtitle">Configure ANTIFY shield thresholds for <strong>{activeGuild.name}</strong>.</p>
+          <h1 className="page-title">Server Rules & Settings</h1>
+          <p className="page-subtitle">Configure ANTIFY cyber-moderation parameters for <strong>{activeGuild.name}</strong>.</p>
         </div>
       </header>
 
@@ -83,10 +119,76 @@ const Settings = () => {
       ) : (
         <div className="settings-grid">
           <div className="settings-main">
-            <Card className="settings-card">
+            {/* 1. Core Bot Modules */}
+            <Card className="settings-card" glow>
               <div className="card-header">
                 <Shield className="header-icon" />
-                <h2>Automated Punishments</h2>
+                <h2>Protection Modules</h2>
+              </div>
+              
+              <div className="settings-list">
+                <div className="setting-item">
+                  <div className="setting-info">
+                    <h3>Anti-Scam Engine</h3>
+                    <p>Detect and block messages matching suspicious scam keywords and behaviors.</p>
+                  </div>
+                  <Toggle 
+                    enabled={currentSettings.antiScamEnabled !== false} 
+                    onChange={() => handleToggle('antiScamEnabled')} 
+                  />
+                </div>
+
+                <div className="setting-item">
+                  <div className="setting-info">
+                    <h3>Anti-Phishing Filter</h3>
+                    <p>Scan incoming message URLs against flagged databases and bad TLD domains.</p>
+                  </div>
+                  <Toggle 
+                    enabled={currentSettings.antiPhishingEnabled !== false} 
+                    onChange={() => handleToggle('antiPhishingEnabled')} 
+                  />
+                </div>
+
+                <div className="setting-item">
+                  <div className="setting-info">
+                    <h3>OCR Image Scanner</h3>
+                    <p>Extract and scan text within image attachments (catches screenshot giveaways).</p>
+                  </div>
+                  <Toggle 
+                    enabled={currentSettings.ocrEnabled} 
+                    onChange={() => handleToggle('ocrEnabled')} 
+                  />
+                </div>
+
+                <div className="setting-item">
+                  <div className="setting-info">
+                    <h3>Welcome Announcements</h3>
+                    <p>Send customized welcome notifications to members joining the Discord server.</p>
+                  </div>
+                  <Toggle 
+                    enabled={currentSettings.welcomeEnabled} 
+                    onChange={() => handleToggle('welcomeEnabled')} 
+                  />
+                </div>
+
+                <div className="setting-item">
+                  <div className="setting-info">
+                    <h3>Auto-Role Assignment</h3>
+                    <p>Automatically assign a default role to new members upon joining.</p>
+                  </div>
+                  <Toggle 
+                    enabled={currentSettings.roleManagementEnabled} 
+                    onChange={() => handleToggle('roleManagementEnabled')} 
+                  />
+                </div>
+              </div>
+            </Card>
+
+            {/* 2. Auto Moderation Actions */}
+            <Card className="settings-card">
+              <div className="card-header">
+                <SettingsIcon className="header-icon" />
+                <h2>Auto Moderation Actions</h2>
               </div>
               
               <div className="settings-list">
@@ -147,30 +249,98 @@ const Settings = () => {
               </div>
             </Card>
 
-            <Card className="settings-card">
-              <div className="card-header">
-                <Eye className="header-icon" />
-                <h2>OCR Image Scanning</h2>
-              </div>
-              
-              <div className="settings-list">
-                <div className="setting-item">
-                  <div className="setting-info">
-                    <h3>Enable OCR Scan</h3>
-                    <p>Extract and parse text from images to catch stealth scams.</p>
-                  </div>
-                  <Toggle 
-                    enabled={currentSettings.ocrEnabled} 
-                    onChange={() => handleToggle('ocrEnabled')} 
-                  />
+            {/* 3. VirusTotal & Logging & Welcomes Text inputs */}
+            <form onSubmit={handleSaveTextSettings}>
+              <Card className="settings-card">
+                <div className="card-header">
+                  <Volume2 className="header-icon" />
+                  <h2>External API & Logging Channels</h2>
                 </div>
-              </div>
-            </Card>
 
+                <div className="settings-list">
+                  <div className="setting-item">
+                    <div className="setting-info">
+                      <h3>VirusTotal API Checks</h3>
+                      <p>Run automated VirusTotal database reputation checks for suspicious links.</p>
+                    </div>
+                    <Toggle 
+                      enabled={currentSettings.virusTotalEnabled !== false} 
+                      onChange={() => handleToggle('virusTotalEnabled')} 
+                    />
+                  </div>
+
+                  <div className="input-field-group">
+                    <label htmlFor="log-channel" className="input-field-label">Security Alerts Channel ID:</label>
+                    <input 
+                      type="text" 
+                      id="log-channel"
+                      placeholder="e.g. 150247658931200254" 
+                      className="text-input-field glass"
+                      value={loggingChannel}
+                      onChange={(e) => setLoggingChannel(e.target.value)}
+                    />
+                    <span className="input-field-desc">Logs detailed cyber threat alert embeds in this text channel.</span>
+                  </div>
+
+                  {currentSettings.roleManagementEnabled && (
+                    <div className="input-field-group">
+                      <label htmlFor="auto-role" className="input-field-label">Default New Member Role ID:</label>
+                      <input 
+                        type="text" 
+                        id="auto-role"
+                        placeholder="e.g. 150247658931200255" 
+                        className="text-input-field glass"
+                        value={autorole}
+                        onChange={(e) => setAutorole(e.target.value)}
+                      />
+                      <span className="input-field-desc">Assigned dynamically when a user joins the server.</span>
+                    </div>
+                  )}
+
+                  {currentSettings.welcomeEnabled && (
+                    <>
+                      <div className="input-field-group">
+                        <label htmlFor="welcome-channel" className="input-field-label">Welcome Announcements Channel ID:</label>
+                        <input 
+                          type="text" 
+                          id="welcome-channel"
+                          placeholder="e.g. 150247658931200256" 
+                          className="text-input-field glass"
+                          value={welcomeChannel}
+                          onChange={(e) => setWelcomeChannel(e.target.value)}
+                        />
+                      </div>
+
+                      <div className="input-field-group">
+                        <label htmlFor="welcome-text" className="input-field-label">Welcome Message Text:</label>
+                        <textarea 
+                          id="welcome-text"
+                          rows="3"
+                          placeholder="Welcome {user} to the server!" 
+                          className="text-input-field text-area-field glass"
+                          value={welcomeText}
+                          onChange={(e) => setWelcomeText(e.target.value)}
+                        />
+                        <span className="input-field-desc">Supported placeholders: `{'{user}'}` (Mentions member), `{'{server}'}` (Server name).</span>
+                      </div>
+                    </>
+                  )}
+
+                  <div className="save-btn-row">
+                    <Button type="submit" className="btn-primary flex-center" style={{ gap: '8px' }}>
+                      <Save size={16} />
+                      <span>Save Inputs & Channels</span>
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+            </form>
+
+            {/* 4. Trust Settings */}
             <Card className="settings-card">
               <div className="card-header">
-                <Shield className="header-icon" />
-                <h2>Trust & Context Intel System</h2>
+                <UserCheck className="header-icon" />
+                <h2>Bypass & Threshold Filters</h2>
               </div>
               
               <div className="settings-list">
@@ -178,7 +348,7 @@ const Settings = () => {
                   <div className="setting-info flex-between">
                     <div>
                       <h3>Scan Sensitivity Threshold</h3>
-                      <p>Adjust AI block confidence limit. Lower threshold = more aggressive scanning.</p>
+                      <p>Adjust AI blocking confidence limit. Lower threshold = more aggressive scanning.</p>
                     </div>
                     <span className="text-purple font-semibold" style={{ fontSize: '1.2rem', color: 'var(--accent-purple-light)' }}>
                       {currentSettings.scanSensitivity || 50}%
@@ -206,7 +376,7 @@ const Settings = () => {
                   <div className="tag-manager-group" style={{ display: 'flex', gap: '8px', margin: '4px 0' }}>
                     <input 
                       type="text" 
-                      placeholder="e.g. 150247658931200254" 
+                      placeholder="Channel ID (e.g. 15024765893120)" 
                       className="keyword-input"
                       value={newChannel}
                       onChange={(e) => setNewChannel(e.target.value)}
@@ -242,7 +412,7 @@ const Settings = () => {
                   <div className="tag-manager-group" style={{ display: 'flex', gap: '8px', margin: '4px 0' }}>
                     <input 
                       type="text" 
-                      placeholder="e.g. 150247658931200255" 
+                      placeholder="Role ID (e.g. 15024765893121)" 
                       className="keyword-input"
                       value={newRole}
                       onChange={(e) => setNewRole(e.target.value)}
@@ -278,7 +448,7 @@ const Settings = () => {
                   <div className="tag-manager-group" style={{ display: 'flex', gap: '8px', margin: '4px 0' }}>
                     <input 
                       type="text" 
-                      placeholder="e.g. 1234567890123456" 
+                      placeholder="User ID (e.g. 12345678901234)" 
                       className="keyword-input"
                       value={newUser}
                       onChange={(e) => setNewUser(e.target.value)}
@@ -314,7 +484,7 @@ const Settings = () => {
                   <div className="tag-manager-group" style={{ display: 'flex', gap: '8px', margin: '4px 0' }}>
                     <input 
                       type="text" 
-                      placeholder="e.g. 150247658931200256" 
+                      placeholder="Channel ID (e.g. 15024765893122)" 
                       className="keyword-input"
                       value={newAnnChannel}
                       onChange={(e) => setNewAnnChannel(e.target.value)}
@@ -347,7 +517,7 @@ const Settings = () => {
           <div className="settings-sidebar">
             <Card className="settings-card">
               <div className="card-header">
-                <SettingsIcon className="header-icon" />
+                <MessageSquare className="header-icon" />
                 <h2>Blacklist Keywords</h2>
               </div>
               <p className="keyword-desc">Add custom words or phrases to block dynamically.</p>

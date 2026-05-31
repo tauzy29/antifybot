@@ -44,6 +44,15 @@ const SettingsSchema = new mongoose.Schema({
   trustedUsers: [{ type: String }],
   announcementChannels: [{ type: String }],
   whitelistedPatterns: [{ type: String }],
+  antiScamEnabled: { type: Boolean, default: true },
+  antiPhishingEnabled: { type: Boolean, default: true },
+  virusTotalEnabled: { type: Boolean, default: true },
+  loggingChannelId: { type: String, default: "" },
+  welcomeEnabled: { type: Boolean, default: false },
+  welcomeChannelId: { type: String, default: "" },
+  welcomeMessageText: { type: String, default: "Welcome {user} to the server! Make sure to verify." },
+  roleManagementEnabled: { type: Boolean, default: false },
+  autoroleId: { type: String, default: "" },
 }, { timestamps: true });
 
 // ==============================

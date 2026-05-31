@@ -1,12 +1,9 @@
 import { create } from 'zustand';
-import axios from 'axios';
 import io from 'socket.io-client';
+import { apiService } from '../services/api';
+import { BACKEND_URL } from '../config';
 
-import { API_BASE_URL, BACKEND_URL } from '../config';
 let socketConnection = null;
-
-// Configure axios defaults to pass session cookies
-axios.defaults.withCredentials = true;
 
 export const useStore = create((set, get) => ({
   // Authentication State
@@ -29,6 +26,7 @@ export const useStore = create((set, get) => ({
       protectedUsers: 0
     },
     detectionTrends: [],
+    weeklyTrends: [],
     ocrTrends: []
   },
   statsLoading: false,
@@ -81,9 +79,9 @@ export const useStore = create((set, get) => ({
   // ==============================
   fetchUser: async () => {
     try {
-      const response = await axios.get(`${API_BASE_URL}/user`);
+      const data = await apiService.fetchUser();
       set({ 
-        user: response.data.user, 
+        user: data.user, 
         isAuthenticated: true, 
         authLoading: false 
       });
@@ -100,10 +98,9 @@ export const useStore = create((set, get) => ({
 
   logoutUser: async () => {
     try {
-      await axios.post(`${API_BASE_URL}/logout`);
+      await apiService.logoutUser();
     } catch (err) {
-      // Fallback to GET logout if POST fails
-      await axios.get(`${API_BASE_URL}/logout`).catch(() => {});
+      console.error('Logout error:', err.message);
     }
     if (socketConnection) {
       socketConnection.disconnect();
@@ -119,8 +116,7 @@ export const useStore = create((set, get) => ({
   fetchGuilds: async () => {
     set({ guildsLoading: true });
     try {
-      const response = await axios.get(`${API_BASE_URL}/guilds`);
-      const guilds = response.data;
+      const guilds = await apiService.fetchGuilds();
       set({ guilds, guildsLoading: false });
       
       // Determine guild to auto-select (persisted or bot-active or first item)
@@ -133,7 +129,7 @@ export const useStore = create((set, get) => ({
         get().setActiveGuild(targetGuild);
       }
     } catch (error) {
-      console.error('Fetch guilds failed:', error);
+      console.error('Fetch guilds failed:', error.message);
       set({ guildsLoading: false });
     }
   },
@@ -163,6 +159,7 @@ export const useStore = create((set, get) => ({
           stats: {
             totals: { detections: 0, punishments: 0, bans: 0, warnings: 0, protectedUsers: 0 },
             detectionTrends: [],
+            weeklyTrends: [],
             ocrTrends: []
           },
           logs: [],
@@ -183,10 +180,10 @@ export const useStore = create((set, get) => ({
     if (!guildId) return;
     set({ statsLoading: true });
     try {
-      const response = await axios.get(`${API_BASE_URL}/analytics/${guildId}`);
-      set({ stats: response.data, statsLoading: false });
+      const data = await apiService.fetchStats(guildId);
+      set({ stats: data, statsLoading: false });
     } catch (error) {
-      console.error('Fetch stats failed:', error);
+      console.error('Fetch stats failed:', error.message);
       set({ statsLoading: false });
     }
   },
@@ -198,15 +195,14 @@ export const useStore = create((set, get) => ({
     if (!guildId) return;
     set({ logsLoading: true });
     try {
-      const params = { page, search, severity, type };
-      const response = await axios.get(`${API_BASE_URL}/logs/${guildId}`, { params });
+      const data = await apiService.fetchLogs(guildId, page, search, severity, type);
       set({ 
-        logs: response.data.logs, 
-        pagination: response.data.pagination, 
+        logs: data.logs, 
+        pagination: data.pagination, 
         logsLoading: false 
       });
     } catch (error) {
-      console.error('Fetch logs failed:', error);
+      console.error('Fetch logs failed:', error.message);
       set({ logsLoading: false });
     }
   },
@@ -215,15 +211,14 @@ export const useStore = create((set, get) => ({
     if (!guildId) return;
     set({ deletedMessagesLoading: true });
     try {
-      const params = { guildId, page, search };
-      const response = await axios.get(`${API_BASE_URL}/deleted-messages`, { params });
+      const data = await apiService.fetchDeletedMessages(guildId, page, search);
       set({
-        deletedMessages: response.data.messages,
-        deletedMessagesPagination: response.data.pagination,
+        deletedMessages: data.messages,
+        deletedMessagesPagination: data.pagination,
         deletedMessagesLoading: false
       });
     } catch (error) {
-      console.error('Fetch deleted messages failed:', error);
+      console.error('Fetch deleted messages failed:', error.message);
       set({ deletedMessagesLoading: false });
     }
   },
@@ -235,10 +230,10 @@ export const useStore = create((set, get) => ({
     if (!guildId) return;
     set({ settingsLoading: true });
     try {
-      const response = await axios.get(`${API_BASE_URL}/settings/${guildId}`);
-      set({ settings: response.data, settingsLoading: false });
+      const data = await apiService.fetchSettings(guildId);
+      set({ settings: data, settingsLoading: false });
     } catch (error) {
-      console.error('Fetch settings failed:', error);
+      console.error('Fetch settings failed:', error.message);
       set({ settingsLoading: false });
     }
   },
@@ -249,16 +244,16 @@ export const useStore = create((set, get) => ({
 
     set({ savingSettings: true });
     try {
-      const response = await axios.post(`${API_BASE_URL}/settings/${activeGuild.id}`, updates);
+      const data = await apiService.updateSettings(activeGuild.id, updates);
       set({ 
-        settings: response.data.settings, 
+        settings: data.settings, 
         savingSettings: false 
       });
       get().addAlert('Settings saved successfully', 'success');
     } catch (error) {
-      console.error('Save settings failed:', error);
+      console.error('Save settings failed:', error.message);
       set({ savingSettings: false });
-      get().addAlert('Failed to save settings', 'error');
+      get().addAlert(error.message || 'Failed to save settings', 'error');
     }
   },
 
@@ -267,14 +262,14 @@ export const useStore = create((set, get) => ({
     if (!activeGuild || !keyword) return;
 
     try {
-      const response = await axios.post(`${API_BASE_URL}/settings/${activeGuild.id}/keywords`, { keyword });
+      const data = await apiService.addKeyword(activeGuild.id, keyword);
       set(state => ({
-        settings: { ...state.settings, blacklistKeywords: response.data.keywords }
+        settings: { ...state.settings, blacklistKeywords: data.keywords }
       }));
       get().addAlert(`Added "${keyword}" to blacklist`, 'success');
     } catch (error) {
-      console.error('Add keyword failed:', error);
-      get().addAlert(error.response?.data?.error || 'Failed to add keyword', 'error');
+      console.error('Add keyword failed:', error.message);
+      get().addAlert(error.message || 'Failed to add keyword', 'error');
     }
   },
 
@@ -283,13 +278,13 @@ export const useStore = create((set, get) => ({
     if (!activeGuild || !keyword) return;
 
     try {
-      const response = await axios.delete(`${API_BASE_URL}/settings/${activeGuild.id}/keywords/${encodeURIComponent(keyword)}`);
+      const data = await apiService.removeKeyword(activeGuild.id, keyword);
       set(state => ({
-        settings: { ...state.settings, blacklistKeywords: response.data.keywords }
+        settings: { ...state.settings, blacklistKeywords: data.keywords }
       }));
       get().addAlert(`Removed "${keyword}" from blacklist`, 'success');
     } catch (error) {
-      console.error('Remove keyword failed:', error);
+      console.error('Remove keyword failed:', error.message);
       get().addAlert('Failed to remove keyword', 'error');
     }
   },
@@ -301,10 +296,10 @@ export const useStore = create((set, get) => ({
     if (!guildId) return;
     set({ premiumLoading: true });
     try {
-      const response = await axios.get(`${API_BASE_URL}/premium/${guildId}`);
-      set({ premium: response.data, premiumLoading: false });
+      const data = await apiService.fetchPremium(guildId);
+      set({ premium: data, premiumLoading: false });
     } catch (error) {
-      console.error('Fetch premium failed:', error);
+      console.error('Fetch premium failed:', error.message);
       set({ premiumLoading: false });
     }
   },
@@ -314,12 +309,12 @@ export const useStore = create((set, get) => ({
     if (!activeGuild) return;
 
     try {
-      const response = await axios.post(`${API_BASE_URL}/premium/${activeGuild.id}/subscribe`, { plan });
+      const data = await apiService.subscribeToPlan(activeGuild.id, plan);
       get().fetchPremium(activeGuild.id);
       get().addAlert(`Upgraded server to ${plan} successfully!`, 'success');
-      return response.data.checkoutUrl;
+      return data.checkoutUrl;
     } catch (error) {
-      console.error('Upgrade subscription failed:', error);
+      console.error('Upgrade subscription failed:', error.message);
       get().addAlert('Failed to upgrade subscription', 'error');
     }
   },
@@ -330,14 +325,14 @@ export const useStore = create((set, get) => ({
   fetchScanStatus: async (guildId) => {
     if (!guildId) return;
     try {
-      const response = await axios.get(`${API_BASE_URL}/scan/status/${guildId}`);
-      if (response.data.active) {
-        set({ scanProgress: response.data });
+      const data = await apiService.fetchScanStatus(guildId);
+      if (data.active) {
+        set({ scanProgress: data });
       } else {
         set({ scanProgress: { active: false, totalChannels: 0, processedChannels: 0, messagesScanned: 0, detectionsFound: 0, currentChannelName: '', status: 'inactive' } });
       }
     } catch (error) {
-      console.error('Fetch scan status failed:', error);
+      console.error('Fetch scan status failed:', error.message);
     }
   },
 
@@ -345,13 +340,13 @@ export const useStore = create((set, get) => ({
     if (!guildId) return;
     set({ scanLoading: true });
     try {
-      const response = await axios.post(`${API_BASE_URL}/scan/${guildId}`, { depth, channelId });
-      set({ scanProgress: response.data.scanState, scanLoading: false });
+      const data = await apiService.triggerScan(guildId, depth, channelId);
+      set({ scanProgress: data.scanState, scanLoading: false });
       get().addAlert('Historical scan initiated successfully', 'success');
     } catch (error) {
-      console.error('Trigger scan failed:', error);
+      console.error('Trigger scan failed:', error.message);
       set({ scanLoading: false });
-      get().addAlert(error.response?.data?.error || 'Failed to start historical scan', 'error');
+      get().addAlert(error.message || 'Failed to start historical scan', 'error');
     }
   },
 
@@ -359,7 +354,7 @@ export const useStore = create((set, get) => ({
     if (!guildId) return;
     set({ scanLoading: true });
     try {
-      const response = await axios.post(`${API_BASE_URL}/scan/${guildId}/cancel`);
+      const data = await apiService.cancelScan(guildId);
       set({
         scanProgress: {
           ...get().scanProgress,
@@ -370,9 +365,9 @@ export const useStore = create((set, get) => ({
       });
       get().addAlert('Historical scan cancelled successfully', 'info');
     } catch (error) {
-      console.error('Cancel scan failed:', error);
+      console.error('Cancel scan failed:', error.message);
       set({ scanLoading: false });
-      get().addAlert(error.response?.data?.error || 'Failed to cancel historical scan', 'error');
+      get().addAlert(error.message || 'Failed to cancel historical scan', 'error');
     }
   },
 
@@ -380,13 +375,13 @@ export const useStore = create((set, get) => ({
     if (!guildId) return;
     set({ scanLoading: true });
     try {
-      const response = await axios.post(`${API_BASE_URL}/scan/${guildId}/resume`);
-      set({ scanProgress: response.data.scanState, scanLoading: false });
+      const data = await apiService.resumeScan(guildId);
+      set({ scanProgress: data.scanState, scanLoading: false });
       get().addAlert('Historical scan resumed successfully', 'success');
     } catch (error) {
-      console.error('Resume scan failed:', error);
+      console.error('Resume scan failed:', error.message);
       set({ scanLoading: false });
-      get().addAlert(error.response?.data?.error || 'Failed to resume historical scan', 'error');
+      get().addAlert(error.message || 'Failed to resume historical scan', 'error');
     }
   },
 
@@ -397,148 +392,147 @@ export const useStore = create((set, get) => ({
     if (!guildId) return;
     set({ moderationLoading: true });
     try {
-      const response = await axios.get(`${API_BASE_URL}/moderation/${guildId}`);
-      set({ moderationData: response.data, moderationLoading: false });
+      const data = await apiService.fetchModerationData(guildId);
+      set({ moderationData: data, moderationLoading: false });
     } catch (error) {
-      console.error('Fetch moderation data failed:', error);
+      console.error('Fetch moderation data failed:', error.message);
       set({ moderationLoading: false });
     }
   },
 
   removeTimeout: async (guildId, userId, punishmentId) => {
     try {
-      const response = await axios.post(`${API_BASE_URL}/moderation/${guildId}/timeout/remove`, { userId, punishmentId });
-      if (response.data.success) {
+      const data = await apiService.removeTimeout(guildId, userId, punishmentId);
+      if (data.success) {
         get().addAlert('Timeout removed successfully', 'success');
         get().fetchModerationData(guildId);
       }
     } catch (error) {
-      console.error('Remove timeout failed:', error);
-      get().addAlert(error.response?.data?.error || 'Failed to remove timeout', 'error');
+      console.error('Remove timeout failed:', error.message);
+      get().addAlert(error.message || 'Failed to remove timeout', 'error');
     }
   },
 
   editTimeoutDuration: async (guildId, userId, punishmentId, durationMinutes) => {
     try {
-      const durationMs = durationMinutes * 60 * 1000;
-      const response = await axios.post(`${API_BASE_URL}/moderation/${guildId}/timeout/edit`, { userId, punishmentId, duration: durationMs });
-      if (response.data.success) {
+      const data = await apiService.editTimeoutDuration(guildId, userId, punishmentId, durationMinutes);
+      if (data.success) {
         get().addAlert(`Timeout duration edited to ${durationMinutes}m`, 'success');
         get().fetchModerationData(guildId);
       }
     } catch (error) {
-      console.error('Edit timeout duration failed:', error);
-      get().addAlert(error.response?.data?.error || 'Failed to edit timeout duration', 'error');
+      console.error('Edit timeout duration failed:', error.message);
+      get().addAlert(error.message || 'Failed to edit timeout duration', 'error');
     }
   },
 
   unbanUser: async (guildId, userId, punishmentId) => {
     try {
-      const response = await axios.post(`${API_BASE_URL}/moderation/${guildId}/ban/remove`, { userId, punishmentId });
-      if (response.data.success) {
+      const data = await apiService.unbanUser(guildId, userId, punishmentId);
+      if (data.success) {
         get().addAlert('User unbanned successfully', 'success');
         get().fetchModerationData(guildId);
       }
     } catch (error) {
-      console.error('Unban user failed:', error);
-      get().addAlert(error.response?.data?.error || 'Failed to unban user', 'error');
+      console.error('Unban user failed:', error.message);
+      get().addAlert(error.message || 'Failed to unban user', 'error');
     }
   },
 
   deleteWarning: async (guildId, warningId) => {
     try {
-      const response = await axios.delete(`${API_BASE_URL}/moderation/${guildId}/warnings/${warningId}`);
-      if (response.data.success) {
+      const data = await apiService.deleteWarning(guildId, warningId);
+      if (data.success) {
         get().addAlert('Warning deleted successfully', 'success');
         get().fetchModerationData(guildId);
       }
     } catch (error) {
-      console.error('Delete warning failed:', error);
-      get().addAlert(error.response?.data?.error || 'Failed to delete warning', 'error');
+      console.error('Delete warning failed:', error.message);
+      get().addAlert(error.message || 'Failed to delete warning', 'error');
     }
   },
 
   revertAction: async (guildId, punishmentId) => {
     try {
-      const response = await axios.post(`${API_BASE_URL}/moderation/${guildId}/revert`, { punishmentId });
-      if (response.data.success) {
+      const data = await apiService.revertAction(guildId, punishmentId);
+      if (data.success) {
         get().addAlert('Moderation action reverted successfully', 'success');
         get().fetchModerationData(guildId);
       }
     } catch (error) {
-      console.error('Revert action failed:', error);
-      get().addAlert(error.response?.data?.error || 'Failed to revert action', 'error');
+      console.error('Revert action failed:', error.message);
+      get().addAlert(error.message || 'Failed to revert action', 'error');
     }
   },
 
   submitAppeal: async (guildId, punishmentId, appealReason) => {
     try {
-      const response = await axios.post(`${API_BASE_URL}/moderation/${guildId}/appeal`, { punishmentId, appealReason });
-      if (response.data.success) {
+      const data = await apiService.submitAppeal(guildId, punishmentId, appealReason);
+      if (data.success) {
         get().addAlert('Appeal submitted successfully', 'success');
         get().fetchModerationData(guildId);
       }
     } catch (error) {
-      console.error('Submit appeal failed:', error);
-      get().addAlert(error.response?.data?.error || 'Failed to submit appeal', 'error');
+      console.error('Submit appeal failed:', error.message);
+      get().addAlert(error.message || 'Failed to submit appeal', 'error');
     }
   },
 
   handleAppeal: async (guildId, punishmentId, action, notes) => {
     try {
-      const response = await axios.post(`${API_BASE_URL}/moderation/${guildId}/appeal/handle`, { punishmentId, action, notes });
-      if (response.data.success) {
+      const data = await apiService.handleAppeal(guildId, punishmentId, action, notes);
+      if (data.success) {
         get().addAlert(`Appeal ${action === 'Approve' ? 'approved' : 'rejected'} successfully`, 'success');
         get().fetchModerationData(guildId);
       }
     } catch (error) {
-      console.error('Handle appeal failed:', error);
-      get().addAlert(error.response?.data?.error || 'Failed to process appeal', 'error');
+      console.error('Handle appeal failed:', error.message);
+      get().addAlert(error.message || 'Failed to process appeal', 'error');
     }
   },
 
   fetchAuditLogs: async (guildId) => {
     if (!guildId) return;
     try {
-      const response = await axios.get(`${API_BASE_URL}/audit-logs/${guildId}`);
-      set({ auditLogs: response.data });
+      const data = await apiService.fetchAuditLogs(guildId);
+      set({ auditLogs: data });
     } catch (error) {
-      console.error('Fetch audit logs failed:', error);
+      console.error('Fetch audit logs failed:', error.message);
     }
   },
 
   editPunishment: async (guildId, punishmentId, updates) => {
     try {
-      const response = await axios.patch(`${API_BASE_URL}/punishments/edit`, { guildId, punishmentId, ...updates });
-      if (response.data.success) {
+      const data = await apiService.editPunishment(guildId, punishmentId, updates);
+      if (data.success) {
         get().addAlert('Punishment updated successfully', 'success');
         get().fetchModerationData(guildId);
         get().fetchAuditLogs(guildId);
       }
     } catch (error) {
-      console.error('Edit punishment failed:', error);
-      get().addAlert(error.response?.data?.error || 'Failed to edit punishment', 'error');
+      console.error('Edit punishment failed:', error.message);
+      get().addAlert(error.message || 'Failed to edit punishment', 'error');
     }
   },
 
   revokePunishment: async (guildId, punishmentId) => {
     try {
-      const response = await axios.post(`${API_BASE_URL}/punishments/revoke`, { guildId, punishmentId });
-      if (response.data.success) {
+      const data = await apiService.revokePunishment(guildId, punishmentId);
+      if (data.success) {
         get().addAlert('Punishment revoked successfully', 'success');
         get().fetchModerationData(guildId);
         get().fetchAuditLogs(guildId);
       }
     } catch (error) {
-      console.error('Revoke punishment failed:', error);
-      get().addAlert(error.response?.data?.error || 'Failed to revoke punishment', 'error');
+      console.error('Revoke punishment failed:', error.message);
+      get().addAlert(error.message || 'Failed to revoke punishment', 'error');
     }
   },
 
   markFalsePositive: async (guildId, evidenceId, action) => {
     try {
-      const response = await axios.post(`${API_BASE_URL}/false-positive`, { guildId, evidenceId, action });
-      if (response.data.success) {
+      const data = await apiService.markFalsePositive(guildId, evidenceId, action);
+      if (data.success) {
         get().addAlert(`False positive action applied: ${action}`, 'success');
         get().fetchModerationData(guildId);
         get().fetchDeletedMessages(guildId);
@@ -546,8 +540,8 @@ export const useStore = create((set, get) => ({
         get().fetchAuditLogs(guildId);
       }
     } catch (error) {
-      console.error('False positive action failed:', error);
-      get().addAlert(error.response?.data?.error || 'Failed to apply false positive action', 'error');
+      console.error('False positive action failed:', error.message);
+      get().addAlert(error.message || 'Failed to apply false positive action', 'error');
     }
   },
 

@@ -1,6 +1,6 @@
 import React from 'react';
-import { Users, ShieldAlert, Zap, Server, PlusCircle, Activity } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { Users, ShieldAlert, Zap, Server, PlusCircle, Activity, AlertTriangle, Shield } from 'lucide-react';
+import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { useStore } from '../store/useStore';
 import Card from '../components/Card';
 import Button from '../components/Button';
@@ -22,7 +22,7 @@ const StatCard = ({ title, value, icon: Icon, subtext }) => (
 );
 
 const Dashboard = () => {
-  const { activeGuild, stats, logs, statsLoading, logsLoading, scanProgress, triggerScan, cancelHistoricalScan, resumeHistoricalScan, deletedMessages, deletedMessagesLoading } = useStore();
+  const { activeGuild, stats, logs, guilds, statsLoading, logsLoading, scanProgress, triggerScan, cancelHistoricalScan, resumeHistoricalScan, deletedMessages, deletedMessagesLoading } = useStore();
   const [scanDepth, setScanDepth] = React.useState(100);
 
   const handleInviteBot = () => {
@@ -57,8 +57,9 @@ const Dashboard = () => {
     );
   }
 
-  const totals = stats.totals || { detections: 0, punishments: 0, bans: 0, warnings: 0, protectedUsers: 0 };
+  const totals = stats.totals || { detections: 0, punishments: 0, bans: 0, warnings: 0, protectedUsers: 0, totalScans: 0 };
   const trendData = stats.detectionTrends || [];
+  const weeklyTrends = stats.weeklyTrends || [];
   const recentLogs = logs.slice(0, 4);
 
   return (
@@ -151,43 +152,86 @@ const Dashboard = () => {
         <>
           <div className="stats-grid">
             <StatCard title="Total Detections" value={totals.detections} icon={ShieldAlert} subtext="Live threat shield active" />
+            <StatCard title="Total Messages Scanned" value={totals.totalScans || 0} icon={Activity} subtext="OCR & text scan checks" />
+            <StatCard title="Protected Members" value={totals.protectedUsers} icon={Users} subtext="Active members shielded" />
+            <StatCard title="Servers Connected" value={guilds.length} icon={Server} subtext="Servers in your workspace" />
             <StatCard title="Punishments Issued" value={totals.punishments} icon={Zap} subtext="Bans and timeouts logged" />
-            <StatCard title="Protected Users" value={totals.protectedUsers} icon={Users} subtext="Active server members" />
-            <StatCard title="Warnings Logged" value={totals.warnings} icon={Server} subtext="Scam triggers flagged" />
+            <StatCard title="Warnings Logged" value={totals.warnings} icon={AlertTriangle} subtext="Scam triggers flagged" />
           </div>
 
           <div className="dashboard-content-grid">
             <div className="dashboard-left-col">
-              <Card className="chart-section" glow>
-                <div className="section-header">
-                  <h2 className="section-title">Detection Trends (Last 7 Days)</h2>
-                </div>
-                <div className="chart-container">
-                  {trendData.length === 0 ? (
-                    <div className="empty-chart-text">No threat trends logged yet.</div>
-                  ) : (
-                    <ResponsiveContainer width="100%" height={300}>
-                      <LineChart data={trendData}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                        <XAxis dataKey="name" stroke="#94a3b8" />
-                        <YAxis stroke="#94a3b8" />
-                        <Tooltip 
-                          contentStyle={{ backgroundColor: '#121422', border: '1px solid rgba(255,255,255,0.05)' }}
-                          itemStyle={{ color: '#8b5cf6' }}
-                        />
-                        <Line 
-                          type="monotone" 
-                          dataKey="detections" 
-                          stroke="#8b5cf6" 
-                          strokeWidth={3}
-                          dot={{ fill: '#8b5cf6', strokeWidth: 2 }}
-                          activeDot={{ r: 8, fill: '#3b82f6' }}
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  )}
-                </div>
-              </Card>
+              <div className="charts-grid">
+                <Card className="chart-section" glow>
+                  <div className="section-header">
+                    <h2 className="section-title">Detection Trends (Last 7 Days)</h2>
+                  </div>
+                  <div className="chart-container">
+                    {trendData.length === 0 ? (
+                      <div className="empty-chart-text">No threat trends logged yet.</div>
+                    ) : (
+                      <ResponsiveContainer width="100%" height={300}>
+                        <LineChart data={trendData}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                          <XAxis dataKey="name" stroke="#94a3b8" />
+                          <YAxis stroke="#94a3b8" />
+                          <Tooltip 
+                            contentStyle={{ backgroundColor: '#121422', border: '1px solid rgba(255,255,255,0.05)' }}
+                            itemStyle={{ color: '#8b5cf6' }}
+                          />
+                          <Line 
+                            type="monotone" 
+                            dataKey="detections" 
+                            stroke="#8b5cf6" 
+                            strokeWidth={3}
+                            dot={{ fill: '#8b5cf6', strokeWidth: 2 }}
+                            activeDot={{ r: 8, fill: '#3b82f6' }}
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    )}
+                  </div>
+                </Card>
+
+                <Card className="chart-section" glow>
+                  <div className="section-header">
+                    <h2 className="section-title">Weekly Threat Volume (Last 4 Weeks)</h2>
+                  </div>
+                  <div className="chart-container">
+                    {weeklyTrends.length === 0 ? (
+                      <div className="empty-chart-text">No weekly aggregates logged yet.</div>
+                    ) : (
+                      <ResponsiveContainer width="100%" height={300}>
+                        <AreaChart data={weeklyTrends}>
+                          <defs>
+                            <linearGradient id="colorWeekly" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.4}/>
+                              <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                          <XAxis dataKey="name" stroke="#94a3b8" />
+                          <YAxis stroke="#94a3b8" />
+                          <Tooltip 
+                            contentStyle={{ backgroundColor: '#121422', border: '1px solid rgba(255,255,255,0.05)' }}
+                            itemStyle={{ color: '#3b82f6' }}
+                          />
+                          <Area 
+                            type="monotone" 
+                            dataKey="detections" 
+                            stroke="#3b82f6" 
+                            strokeWidth={3}
+                            fillOpacity={1}
+                            fill="url(#colorWeekly)"
+                            dot={{ fill: '#3b82f6', strokeWidth: 2 }}
+                            activeDot={{ r: 8, fill: '#8b5cf6' }}
+                          />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    )}
+                  </div>
+                </Card>
+              </div>
 
               {/* Archived Deleted Messages Section */}
               <Card className="deleted-messages-section glass-panel">

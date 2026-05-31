@@ -171,6 +171,31 @@ async function punish(message, reason, type, severity = 'high', score = null) {
       `🚨 **ANTIFY Protection Active** | ${message.author} was **${action.toLowerCase()}**.\nReason: *${reason}*`
     );
 
+    // Detailed moderation logging channel support
+    if (settings.loggingChannelId) {
+      try {
+        const logChannel = await message.guild.channels.fetch(settings.loggingChannelId);
+        if (logChannel && logChannel.isTextBased()) {
+          const embed = {
+            title: `🛡️ Security Alert | Threat Handled`,
+            color: severity === 'critical' ? 0xff0000 : (severity === 'high' ? 0xffa500 : 0xffff00),
+            fields: [
+              { name: 'Target User', value: `${message.author.tag} (${message.author.id})`, inline: true },
+              { name: 'Action Taken', value: action, inline: true },
+              { name: 'Threat Type', value: type, inline: true },
+              { name: 'Scam Score', value: `${finalScore}%`, inline: true },
+              { name: 'Reason', value: reason },
+            ],
+            timestamp: new Date().toISOString(),
+            footer: { text: 'ANTIFY Cybersecurity Shield' }
+          };
+          await logChannel.send({ embeds: [embed] });
+        }
+      } catch (logErr) {
+        console.error('Failed to send moderation log to designated channel:', logErr.message);
+      }
+    }
+
     console.log(`🛡️ Blocked ${message.author.tag} | Action: ${action} | Reason: ${reason}`);
 
   } catch (err) {
@@ -294,7 +319,7 @@ client.on('messageCreate', async (message) => {
   // ==========================
   // TEXT SCAN
   // ==========================
-  if (message.content) {
+  if (settings.antiScamEnabled !== false && message.content) {
     const scamScore = calculateScamScore(message.content, settings);
     if (scamScore >= sensitivity) {
       return punish(
@@ -310,35 +335,39 @@ client.on('messageCreate', async (message) => {
   // ==========================
   // LINK SCAN
   // ==========================
-  const urls = extractUrls(message.content);
+  if (settings.antiPhishingEnabled !== false) {
+    const urls = extractUrls(message.content);
 
-  if (urls) {
-    for (const url of urls) {
-      // suspicious domains
-      if (hasBadDomain(url)) {
-        const scamScore = calculateScamScore(message.content, settings);
-        if (scamScore >= sensitivity) {
-          return punish(
-            message,
-            `Suspicious domain detected (Score: ${scamScore})`,
-            "Phishing Link",
-            "high",
-            scamScore
-          );
+    if (urls) {
+      for (const url of urls) {
+        // suspicious domains
+        if (hasBadDomain(url)) {
+          const scamScore = calculateScamScore(message.content, settings);
+          if (scamScore >= sensitivity) {
+            return punish(
+              message,
+              `Suspicious domain detected (Score: ${scamScore})`,
+              "Phishing Link",
+              "high",
+              scamScore
+            );
+          }
         }
-      }
 
-      // VirusTotal
-      const malicious = await scanUrl(url);
+        // VirusTotal
+        if (settings.virusTotalEnabled !== false) {
+          const malicious = await scanUrl(url);
 
-      if (malicious) {
-        return punish(
-          message,
-          "Malicious link detected",
-          "Phishing Link",
-          "critical",
-          98
-        );
+          if (malicious) {
+            return punish(
+              message,
+              "Malicious link detected",
+              "Phishing Link",
+              "critical",
+              98
+            );
+          }
+        }
       }
     }
   }
@@ -391,16 +420,18 @@ client.on('messageCreate', async (message) => {
                 }
               }
 
-              const malicious = await scanUrl(url);
+              if (settings.virusTotalEnabled !== false) {
+                const malicious = await scanUrl(url);
 
-              if (malicious) {
-                return punish(
-                  message,
-                  "Malicious URL inside image detected",
-                  "Scam Image",
-                  "critical",
-                  98
-                );
+                if (malicious) {
+                  return punish(
+                    message,
+                    "Malicious URL inside image detected",
+                    "Scam Image",
+                    "critical",
+                    98
+                  );
+                }
               }
             }
           }
@@ -529,6 +560,48 @@ client.on('interactionCreate', async interaction => {
 
   } catch (err) {
     console.log("Interaction Error:", err);
+  }
+});
+
+// ==============================
+// GUILD MEMBER ADD EVENT (Auto-Role & Welcome Messages)
+// ==============================
+client.on('guildMemberAdd', async (member) => {
+  try {
+    const guildId = member.guild.id;
+    const settings = await Settings.findOne({ guildId }) || new Settings({ guildId });
+
+    // 1. Welcome Message
+    if (settings.welcomeEnabled && settings.welcomeChannelId) {
+      try {
+        const welcomeChannel = await member.guild.channels.fetch(settings.welcomeChannelId);
+        if (welcomeChannel && welcomeChannel.isTextBased()) {
+          const welcomeMsg = settings.welcomeMessageText
+            ? settings.welcomeMessageText.replace('{user}', member.toString()).replace('{member}', member.toString()).replace('{server}', member.guild.name)
+            : `Welcome ${member} to the server!`;
+          await welcomeChannel.send(welcomeMsg);
+        }
+      } catch (welcomeErr) {
+        console.error(`[Welcome] Failed to send welcome message in guild ${guildId}:`, welcomeErr.message);
+      }
+    }
+
+    // 2. Auto Role Assignment
+    if (settings.roleManagementEnabled && settings.autoroleId) {
+      try {
+        const role = member.guild.roles.cache.get(settings.autoroleId);
+        if (role) {
+          await member.roles.add(role);
+          console.log(`[Auto-Role] Added role ${role.name} to new member ${member.user.tag}`);
+        } else {
+          console.warn(`[Auto-Role] Role ID ${settings.autoroleId} not found in guild ${guildId}`);
+        }
+      } catch (roleErr) {
+        console.error(`[Auto-Role] Failed to assign role in guild ${guildId}:`, roleErr.message);
+      }
+    }
+  } catch (err) {
+    console.error('Error handling guildMemberAdd:', err);
   }
 });
 
