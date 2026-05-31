@@ -242,6 +242,13 @@
   color: #93c5fd !important;
 }
 
+.table-container {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin-top: 0.5rem;
+}
+
 .moderation-table {
   width: 100%;
   border-collapse: collapse;
@@ -249,9 +256,9 @@
 
 .moderation-table th {
   text-align: left;
-  padding: 12px 16px;
+  padding: 10px 12px;
   color: var(--text-secondary);
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   font-weight: 600;
   text-transform: uppercase;
   border-bottom: 1px solid var(--border-color);
@@ -259,8 +266,8 @@
 }
 
 .moderation-table td {
-  padding: 14px 16px;
-  font-size: 0.85rem;
+  padding: 10px 12px;
+  font-size: 0.8rem;
   color: var(--text-secondary);
   border-bottom: 1px solid rgba(255, 255, 255, 0.02);
   vertical-align: middle;

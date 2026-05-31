@@ -143,6 +143,7 @@ const Moderation = () => {
 
   const punishments = moderationData?.punishments || [];
   const warnings = moderationData?.warnings || [];
+  const appeals = punishments.filter(p => p.appealStatus && p.appealStatus !== 'None');
 
   // Unified "Recent Actions" combining warnings, timeouts, kicks, bans
   const unifiedActions = [
@@ -1112,7 +1113,7 @@ const Moderation = () => {
                                   {log.action}
                                 </span>
                               </td>
-                              <td style={{ fontSize: '0.85rem' }}>{log.details}</td>
+                              <td style={{ fontSize: '0.8rem', whiteSpace: 'normal', wordBreak: 'break-word', maxWidth: '350px' }}>{log.details}</td>
                               <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                                 {new Date(log.createdAt).toLocaleString()}
                               </td>
