@@ -227,6 +227,49 @@
   margin-top: 4px;
 }
 
+/* Upgraded Moderation Styles */
+.filter-tab-btn:hover {
+  color: white !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+}
+
+.filter-tab-btn.active {
+  box-shadow: var(--glow-purple);
+}
+
+.badge-warning {
+  background: rgba(59, 130, 246, 0.15) !important;
+  color: #93c5fd !important;
+}
+
+.table-container {
+  overflow-x: auto;
+  margin-top: 1rem;
+}
+
+.moderation-table th {
+  text-align: left;
+  padding: 12px 16px;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border-color);
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.moderation-table td {
+  padding: 14px 16px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.02);
+  vertical-align: middle;
+}
+
+.moderation-table tr:hover td {
+  background: rgba(255, 255, 255, 0.01);
+}
+
 @media (max-width: 1024px) {
   .moderation-layout {
     grid-template-columns: 1fr;

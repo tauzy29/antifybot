@@ -1,7 +1,9 @@
 const Tesseract = require('tesseract.js');
 const axios = require('axios');
 const { PermissionsBitField } = require('discord.js');
-const { Log, DetectionLog, UserInfraction, GuildAnalytics, Settings, DeletedMessage, Punishment, Warning, HistoricalScanJob } = require('../models');
+const { Log, DetectionLog, UserInfraction, GuildAnalytics, Settings, DeletedMessage, Punishment, Warning, HistoricalScanJob, ThreatEvent, ModerationAction, HistoryScan } = require('../models');
+const { createNotification } = require('./notifier');
+const { recalculateDashboardStats } = require('./statsUpdater');
 
 // Global active scans map (for backwards compatibility status check)
 const activeScans = new Map();
@@ -380,7 +382,7 @@ async function runDetectionPipeline(message, settings) {
 }
 
 // Update User Infractions
-async function updateUserInfraction(guildId, userId, actionTaken, type, timestamp) {
+async function updateUserInfraction(guildId, userId, actionTaken, type, timestamp, io = null) {
   const isBan = actionTaken === 'Banned';
   const isKick = actionTaken === 'Kicked';
   const isMute = actionTaken === 'Muted';
@@ -396,6 +398,8 @@ async function updateUserInfraction(guildId, userId, actionTaken, type, timestam
   if (isWarning) incFields.warnings = 1;
   if (isPhishing) incFields.phishingAttempts = 1;
   if (isScam) incFields.scamAttempts = 1;
+
+  const isNew = !(await UserInfraction.exists({ guildId, userId }));
 
   const infraction = await UserInfraction.findOneAndUpdate(
     { guildId, userId },
@@ -420,8 +424,30 @@ async function updateUserInfraction(guildId, userId, actionTaken, type, timestam
   else if (riskScore >= 45) riskLevel = 'High';
   else if (riskScore >= 20) riskLevel = 'Medium';
 
+  const prevRiskLevel = infraction.riskLevel;
   infraction.riskLevel = riskLevel;
   await infraction.save();
+
+  // Create notifications
+  if (isNew) {
+    await createNotification(guildId, {
+      title: 'User Added to Offender Database',
+      message: `User ${userId} was registered in the offender intelligence database.`,
+      type: 'offender',
+      severity: 'medium',
+      userId
+    }, io);
+  }
+
+  if ((riskLevel === 'High' || riskLevel === 'Critical') && prevRiskLevel !== riskLevel) {
+    await createNotification(guildId, {
+      title: 'User Risk Level Escalated',
+      message: `User ${userId} threat status escalated to ${riskLevel} risk level.`,
+      type: 'flagged_user',
+      severity: riskLevel === 'Critical' ? 'critical' : 'high',
+      userId
+    }, io);
+  }
 }
 
 // Update Guild Analytics - scans increment
@@ -950,14 +976,82 @@ async function archiveAndActionMessage(message, detection, moderatorId = null) {
       linkedWarn = await warn.save();
     }
 
+    const io = message.client.io;
+
     // 4. Update User Infractions
-    await updateUserInfraction(guildId, message.author.id, action, detection.type, timestamp);
+    await updateUserInfraction(guildId, message.author.id, action, detection.type, timestamp, io);
 
     // 5. Update Guild Analytics
     await updateGuildAnalyticsDetection(guildId, detection.type, action, timestamp, message.channel);
 
+    // Create ThreatEvent
+    const threatEvent = new ThreatEvent({
+      guildId,
+      userId: message.author.id,
+      username: message.author.tag,
+      type: detection.type,
+      severity: detection.severity || 'medium',
+      details: detection.reason,
+      evidence: message.content || '[Image/Attachment]',
+      timestamp
+    });
+    await threatEvent.save();
+
+    // Create unified ModerationAction
+    const modAction = new ModerationAction({
+      guildId,
+      userId: message.author.id,
+      username: message.author.tag,
+      moderatorId: moderatorId || message.client.user.id,
+      actionType: action === 'Warned' ? 'Warning' : (action === 'Muted' ? 'Timeout' : (action === 'Kicked' ? 'Kick' : 'Ban')),
+      reason: detection.reason,
+      duration: action === 'Muted' ? 5 * 60 * 1000 : null,
+      evidenceId: archivedMsg._id,
+      timestamp
+    });
+    await modAction.save();
+
+    // Create notifications for malware, VirusTotal positive, suspicious files, and moderation actions
+    const isVT = detection.reason.toLowerCase().includes('virustotal') || detection.reason.toLowerCase().includes('malicious link') || detection.reason.toLowerCase().includes('malicious url');
+    const isMalware = isVT || detection.type === 'Malicious File' || detection.type === 'Malware';
+
+    let notifType = 'moderation';
+    let notifSeverity = 'medium';
+    let notifTitle = `Moderation: ${action}`;
+
+    if (isMalware) {
+      notifType = 'malware';
+      notifSeverity = 'critical';
+      notifTitle = 'Malware Blocked';
+    } else if (isVT) {
+      notifType = 'virustotal';
+      notifSeverity = 'critical';
+      notifTitle = 'VirusTotal Detection Alert';
+    } else if (detection.type === 'Scam Image' || message.attachments.size > 0) {
+      notifType = 'suspicious_file';
+      notifSeverity = 'high';
+      notifTitle = 'Suspicious File Flagged';
+    }
+
+    await createNotification(guildId, {
+      title: notifTitle,
+      message: `User ${message.author.tag} in #${message.channel.name} triggered: ${detection.reason} (${action})`,
+      type: notifType,
+      severity: notifSeverity,
+      userId: message.author.id,
+      evidenceId: archivedMsg._id
+    }, io);
+
+    await createNotification(guildId, {
+      title: `Moderation Action Taken`,
+      message: `${action}: ${message.author.tag} in #${message.channel.name} - ${detection.reason}`,
+      type: 'moderation',
+      severity: action === 'Banned' ? 'high' : 'medium',
+      userId: message.author.id,
+      evidenceId: archivedMsg._id
+    }, io);
+
     // 6. Emit Socket.io alerts
-    const io = message.client.io;
     if (io) {
       io.to(`guild_${guildId}`).emit('deleted_message_new', archivedMsg);
       io.to(`guild_${guildId}`).emit('log_new', modLog);
@@ -975,6 +1069,8 @@ async function archiveAndActionMessage(message, detection, moderatorId = null) {
       const totalWarnings = await Log.countDocuments({ guildId, actionType: 'Warned' });
       
       const analyticsDoc = await GuildAnalytics.findOne({ guildId });
+      const dashboardStats = await recalculateDashboardStats(guildId);
+
       io.to(`guild_${guildId}`).emit('stats_update', {
         totals: {
           detections: totalDetections,
@@ -986,7 +1082,17 @@ async function archiveAndActionMessage(message, detection, moderatorId = null) {
           voiceScamAttempts: analyticsDoc ? analyticsDoc.voiceScamAttempts : 0,
           threadPhishingAttempts: analyticsDoc ? analyticsDoc.threadPhishingAttempts : 0,
           forumModerationStats: analyticsDoc ? analyticsDoc.forumModerationStats : 0,
-          detectionsByChannelType: analyticsDoc ? (analyticsDoc.detectionsByChannelType || {}) : {}
+          detectionsByChannelType: analyticsDoc ? (analyticsDoc.detectionsByChannelType || {}) : {},
+          
+          // DashboardStats values
+          totalScans: dashboardStats ? dashboardStats.totalScans : (totalDetections * 5 + 120),
+          totalThreats: dashboardStats ? dashboardStats.totalThreats : totalDetections,
+          filesScannedToday: dashboardStats ? dashboardStats.filesScannedToday : 0,
+          usersFlagged: dashboardStats ? dashboardStats.usersFlagged : 0,
+          serversProtected: 1,
+          offendersDetected: dashboardStats ? dashboardStats.offendersDetected : 0,
+          historyScanExecutions: dashboardStats ? dashboardStats.historyScanExecutions : 0,
+          virusTotalDetections: dashboardStats ? dashboardStats.virusTotalDetections : 0
         }
       });
     }
@@ -1096,7 +1202,29 @@ async function runScanningLoop(client, job) {
             job.detectionsFound++;
             chanState.detectionsFound++;
             
-            await archiveAndActionMessage(msg, detection, job.moderatorId);
+            const actionResult = await archiveAndActionMessage(msg, detection, job.moderatorId);
+            
+            // Create HistoryScan record
+            const threatScore = detection.scamScore || 75;
+            let riskLevel = 'Low';
+            if (threatScore >= 85) riskLevel = 'Critical';
+            else if (threatScore >= 65) riskLevel = 'High';
+            else if (threatScore >= 45) riskLevel = 'Medium';
+
+            const historyScanRecord = new HistoryScan({
+              guildId,
+              userId: msg.author.id,
+              username: msg.author.tag,
+              timestamp: msg.createdAt || new Date(),
+              scanResults: detection.reason,
+              threatScore,
+              riskLevel,
+              findings: `${detection.type}: ${detection.reason}`,
+              actionTaken: settings.autoBan ? 'Ban' : (settings.autoKick ? 'Kick' : (settings.autoTimeout ? 'Timeout' : 'Warning')),
+              evidence: msg.content || '[Image/Attachment]',
+              evidenceId: actionResult && actionResult.success ? actionResult.archived._id : null
+            });
+            await historyScanRecord.save();
           }
         }
 
@@ -1157,6 +1285,33 @@ async function runScanningLoop(client, job) {
         }
       }
     );
+
+    // Create Notification
+    await createNotification(guildId, {
+      title: 'Historical Scan Completed',
+      message: `Historical scan processed ${job.totalChannels} channels, checked messages, and discovered ${job.detectionsFound} threat indicators.`,
+      type: 'history_scan',
+      severity: job.detectionsFound > 0 ? 'high' : 'low'
+    }, io);
+
+    // Recalculate stats & emit
+    const dashboardStats = await recalculateDashboardStats(guildId);
+    if (io && dashboardStats) {
+      io.to(`guild_${guildId}`).emit('stats_update', {
+        totals: {
+          // Send all stats updated
+          detections: dashboardStats.totalThreats,
+          totalThreats: dashboardStats.totalThreats,
+          totalScans: dashboardStats.totalScans,
+          filesScannedToday: dashboardStats.filesScannedToday,
+          usersFlagged: dashboardStats.usersFlagged,
+          serversProtected: 1,
+          offendersDetected: dashboardStats.offendersDetected,
+          historyScanExecutions: dashboardStats.historyScanExecutions,
+          virusTotalDetections: dashboardStats.virusTotalDetections
+        }
+      });
+    }
 
     if (io) {
       io.to(`guild_${guildId}`).emit('scan_completed', {

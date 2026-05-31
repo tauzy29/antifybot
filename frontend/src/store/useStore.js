@@ -74,6 +74,28 @@ export const useStore = create((set, get) => ({
   alerts: [], // Toasts queue
   socketConnected: false,
 
+  // SOC Notifications
+  notifications: [],
+  notificationsLoading: false,
+
+  // SOC History Scans
+  historyScans: [],
+  historyScansPagination: {
+    total: 0,
+    page: 1,
+    limit: 10,
+    pages: 1
+  },
+  historyScansLoading: false,
+
+  // SOC Server Management
+  serverManagement: null,
+  serverManagementLoading: false,
+
+  // SOC Dashboard Stats
+  dashboardStats: null,
+  dashboardStatsLoading: false,
+
   // ==============================
   // ACTIONS - AUTHENTICATION
   // ==============================
@@ -144,6 +166,8 @@ export const useStore = create((set, get) => ({
       if (guild.botActive) {
         get().initSocket(guild.id, oldGuild?.id);
         get().fetchStats(guild.id);
+        get().fetchDashboardStats(guild.id);
+        get().fetchNotifications(guild.id);
         get().fetchSettings(guild.id);
         get().fetchLogs(guild.id);
         get().fetchPremium(guild.id);
@@ -151,6 +175,7 @@ export const useStore = create((set, get) => ({
         get().fetchDeletedMessages(guild.id);
         get().fetchModerationData(guild.id);
         get().fetchAuditLogs(guild.id);
+        get().fetchServerManagement(guild.id);
       } else {
         if (socketConnection && oldGuild) {
           socketConnection.emit('leave_guild', oldGuild.id);
@@ -167,7 +192,11 @@ export const useStore = create((set, get) => ({
           premium: null,
           moderationData: { punishments: [], warnings: [] },
           auditLogs: [],
-          moderatorFeed: []
+          moderatorFeed: [],
+          notifications: [],
+          historyScans: [],
+          serverManagement: null,
+          dashboardStats: null
         });
       }
     }
@@ -567,6 +596,98 @@ export const useStore = create((set, get) => ({
   },
 
   // ==============================
+  // ACTIONS - SOC NOTIFICATIONS
+  // ==============================
+  fetchNotifications: async (guildId) => {
+    if (!guildId) return;
+    set({ notificationsLoading: true });
+    try {
+      const notifications = await apiService.fetchNotifications(guildId);
+      set({ notifications, notificationsLoading: false });
+    } catch (error) {
+      console.error('Fetch notifications failed:', error.message);
+      set({ notificationsLoading: false });
+    }
+  },
+
+  markAllNotificationsRead: async (guildId) => {
+    if (!guildId) return;
+    try {
+      const data = await apiService.markAllNotificationsRead(guildId);
+      if (data.success) {
+        set({ notifications: data.notifications });
+      }
+    } catch (error) {
+      console.error('Mark all notifications read failed:', error.message);
+    }
+  },
+
+  markNotificationRead: async (guildId, notificationId) => {
+    if (!guildId || !notificationId) return;
+    try {
+      const data = await apiService.markNotificationRead(guildId, notificationId);
+      if (data.success) {
+        set(state => ({
+          notifications: state.notifications.map(n => 
+            n._id === notificationId ? { ...n, read: true } : n
+          )
+        }));
+      }
+    } catch (error) {
+      console.error('Mark notification read failed:', error.message);
+    }
+  },
+
+  // ==============================
+  // ACTIONS - SOC DASHBOARD STATS
+  // ==============================
+  fetchDashboardStats: async (guildId) => {
+    if (!guildId) return;
+    set({ dashboardStatsLoading: true });
+    try {
+      const data = await apiService.fetchDashboardStats(guildId);
+      set({ dashboardStats: data, dashboardStatsLoading: false });
+    } catch (error) {
+      console.error('Fetch dashboard stats failed:', error.message);
+      set({ dashboardStatsLoading: false });
+    }
+  },
+
+  // ==============================
+  // ACTIONS - SOC HISTORY SCANS
+  // ==============================
+  fetchHistoryScans: async (guildId, page = 1, search = '', riskLevel = '', actionTaken = '') => {
+    if (!guildId) return;
+    set({ historyScansLoading: true });
+    try {
+      const data = await apiService.fetchHistoryScans(guildId, page, search, riskLevel, actionTaken);
+      set({
+        historyScans: data.findings,
+        historyScansPagination: data.pagination,
+        historyScansLoading: false
+      });
+    } catch (error) {
+      console.error('Fetch history scans failed:', error.message);
+      set({ historyScansLoading: false });
+    }
+  },
+
+  // ==============================
+  // ACTIONS - SOC SERVER MANAGEMENT
+  // ==============================
+  fetchServerManagement: async (guildId) => {
+    if (!guildId) return;
+    set({ serverManagementLoading: true });
+    try {
+      const data = await apiService.fetchServerManagement(guildId);
+      set({ serverManagement: data, serverManagementLoading: false });
+    } catch (error) {
+      console.error('Fetch server management failed:', error.message);
+      set({ serverManagementLoading: false });
+    }
+  },
+
+  // ==============================
   // ACTIONS - SOCKET CONNECTION
   // ==============================
   initSocket: (newGuildId, oldGuildId) => {
@@ -622,8 +743,48 @@ export const useStore = create((set, get) => ({
         set(state => ({
           stats: {
             ...state.stats,
-            totals: data.totals
+            totals: {
+              ...state.stats.totals,
+              ...data.totals
+            }
+          },
+          dashboardStats: {
+            ...state.dashboardStats,
+            ...data.totals
           }
+        }));
+      });
+
+      // Handle real-time notifications
+      socketConnection.on('notification_new', (notification) => {
+        set(state => {
+          const currentList = state.notifications || [];
+          if (currentList.some(n => n._id === notification._id)) {
+            return {};
+          }
+
+          // Trigger browser notification sound
+          try {
+            const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-500.wav');
+            audio.volume = 0.4;
+            audio.play().catch(() => {});
+          } catch (e) {}
+
+          // Add alert toast
+          let toastType = 'info';
+          if (notification.severity === 'high') toastType = 'warning';
+          if (notification.severity === 'critical') toastType = 'error';
+          get().addAlert(`🚨 [SOC] ${notification.title}: ${notification.message}`, toastType);
+
+          return {
+            notifications: [notification, ...currentList].slice(0, 50)
+          };
+        });
+      });
+
+      socketConnection.on('notifications_read_all', (data) => {
+        set(state => ({
+          notifications: (state.notifications || []).map(n => ({ ...n, read: true }))
         }));
       });
 

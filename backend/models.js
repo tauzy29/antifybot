@@ -421,6 +421,92 @@ const HistoricalScanJobSchema = new mongoose.Schema({
   completedAt: { type: Date }
 }, { timestamps: true });
 
+// ==============================
+// NOTIFICATION SCHEMA
+// ==============================
+const NotificationSchema = new mongoose.Schema({
+  guildId: { type: String, required: true, index: true },
+  title: { type: String, required: true },
+  message: { type: String, required: true },
+  type: { type: String, required: true }, // malware, suspicious_file, virustotal, flagged_user, history_scan, moderation, offender
+  severity: { type: String, enum: ['low', 'medium', 'high', 'critical'], default: 'medium', index: true },
+  read: { type: Boolean, default: false },
+  timestamp: { type: Date, default: Date.now, index: true },
+  userId: { type: String },
+  evidenceId: { type: String }
+}, { timestamps: true });
+
+NotificationSchema.index({ guildId: 1, read: 1 });
+NotificationSchema.index({ guildId: 1, timestamp: -1 });
+
+// ==============================
+// HISTORY SCAN RECORD SCHEMA
+// ==============================
+const HistoryScanSchema = new mongoose.Schema({
+  guildId: { type: String, required: true, index: true },
+  userId: { type: String, required: true, index: true },
+  username: { type: String, required: true },
+  timestamp: { type: Date, default: Date.now, index: true },
+  scanResults: { type: String },
+  threatScore: { type: Number, default: 0 },
+  riskLevel: { type: String, enum: ['Low', 'Medium', 'High', 'Critical'], default: 'Low' },
+  findings: { type: String },
+  actionTaken: { type: String },
+  evidence: { type: String },
+  evidenceId: { type: String }
+}, { timestamps: true });
+
+HistoryScanSchema.index({ guildId: 1, timestamp: -1 });
+
+// ==============================
+// THREAT EVENT SCHEMA
+// ==============================
+const ThreatEventSchema = new mongoose.Schema({
+  guildId: { type: String, required: true, index: true },
+  userId: { type: String, index: true },
+  username: { type: String },
+  type: { type: String, required: true }, // Malware, Phishing Link, Scam Words, VirusTotal Positive
+  severity: { type: String, enum: ['low', 'medium', 'high', 'critical'], default: 'medium' },
+  details: { type: String },
+  evidence: { type: String },
+  timestamp: { type: Date, default: Date.now, index: true }
+}, { timestamps: true });
+
+ThreatEventSchema.index({ guildId: 1, timestamp: -1 });
+
+// ==============================
+// UNIFIED MODERATION ACTION SCHEMA
+// ==============================
+const ModerationActionSchema = new mongoose.Schema({
+  guildId: { type: String, required: true, index: true },
+  userId: { type: String, required: true, index: true },
+  username: { type: String, required: true },
+  moderatorId: { type: String, required: true },
+  actionType: { type: String, enum: ['Warning', 'Timeout', 'Kick', 'Ban'], required: true },
+  reason: { type: String },
+  duration: { type: Number },
+  evidenceId: { type: String },
+  timestamp: { type: Date, default: Date.now, index: true }
+}, { timestamps: true });
+
+ModerationActionSchema.index({ guildId: 1, timestamp: -1 });
+
+// ==============================
+// DASHBOARD STATS SCHEMA
+// ==============================
+const DashboardStatsSchema = new mongoose.Schema({
+  guildId: { type: String, required: true, unique: true, index: true },
+  totalScans: { type: Number, default: 0 },
+  totalThreats: { type: Number, default: 0 },
+  filesScannedToday: { type: Number, default: 0 },
+  usersFlagged: { type: Number, default: 0 },
+  serversProtected: { type: Number, default: 1 },
+  offendersDetected: { type: Number, default: 0 },
+  historyScanExecutions: { type: Number, default: 0 },
+  virusTotalDetections: { type: Number, default: 0 },
+  lastUpdated: { type: Date, default: Date.now }
+}, { timestamps: true });
+
 module.exports = {
   User: mongoose.model('User', UserSchema),
   Guild: mongoose.model('Guild', GuildSchema),
@@ -434,5 +520,10 @@ module.exports = {
   Warning: mongoose.model('Warning', WarningSchema),
   Punishment: mongoose.model('Punishment', PunishmentSchema),
   AuditLog: mongoose.model('AuditLog', AuditLogSchema),
-  Subscription: mongoose.model('Subscription', SubscriptionSchema)
+  Subscription: mongoose.model('Subscription', SubscriptionSchema),
+  Notification: mongoose.model('Notification', NotificationSchema),
+  HistoryScan: mongoose.model('HistoryScan', HistoryScanSchema),
+  ThreatEvent: mongoose.model('ThreatEvent', ThreatEventSchema),
+  ModerationAction: mongoose.model('ModerationAction', ModerationActionSchema),
+  DashboardStats: mongoose.model('DashboardStats', DashboardStatsSchema)
 };

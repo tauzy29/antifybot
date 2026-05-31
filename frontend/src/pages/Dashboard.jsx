@@ -1,5 +1,5 @@
-import React from 'react';
-import { Users, ShieldAlert, Zap, Server, PlusCircle, Activity, AlertTriangle, Shield } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Users, ShieldAlert, Zap, Server, PlusCircle, Activity, AlertTriangle, Shield, FileText, UserX, History, Globe } from 'lucide-react';
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { useStore } from '../store/useStore';
 import Card from '../components/Card';
@@ -22,8 +22,30 @@ const StatCard = ({ title, value, icon: Icon, subtext }) => (
 );
 
 const Dashboard = () => {
-  const { activeGuild, stats, logs, guilds, statsLoading, logsLoading, scanProgress, triggerScan, cancelHistoricalScan, resumeHistoricalScan, deletedMessages, deletedMessagesLoading } = useStore();
-  const [scanDepth, setScanDepth] = React.useState(100);
+  const { 
+    activeGuild, 
+    stats, 
+    dashboardStats,
+    fetchDashboardStats,
+    logs, 
+    guilds, 
+    statsLoading, 
+    logsLoading, 
+    scanProgress, 
+    triggerScan, 
+    cancelHistoricalScan, 
+    resumeHistoricalScan, 
+    deletedMessages, 
+    deletedMessagesLoading 
+  } = useStore();
+  
+  const [scanDepth, setScanDepth] = useState(100);
+
+  useEffect(() => {
+    if (activeGuild?.botActive) {
+      fetchDashboardStats(activeGuild.id);
+    }
+  }, [activeGuild?.id, fetchDashboardStats]);
 
   const handleInviteBot = () => {
     if (!activeGuild) return;
@@ -57,7 +79,17 @@ const Dashboard = () => {
     );
   }
 
-  const totals = stats.totals || { detections: 0, punishments: 0, bans: 0, warnings: 0, protectedUsers: 0, totalScans: 0 };
+  const totals = {
+    totalScans: stats.totals?.totalScans || dashboardStats?.totalScans || 0,
+    totalThreats: stats.totals?.totalThreats || stats.totals?.detections || dashboardStats?.totalThreats || 0,
+    filesScannedToday: stats.totals?.filesScannedToday || dashboardStats?.filesScannedToday || 0,
+    usersFlagged: stats.totals?.usersFlagged || dashboardStats?.usersFlagged || 0,
+    serversProtected: stats.totals?.serversProtected || dashboardStats?.serversProtected || 1,
+    offendersDetected: stats.totals?.offendersDetected || dashboardStats?.offendersDetected || 0,
+    historyScanExecutions: stats.totals?.historyScanExecutions || dashboardStats?.historyScanExecutions || 0,
+    virusTotalDetections: stats.totals?.virusTotalDetections || dashboardStats?.virusTotalDetections || 0,
+  };
+
   const trendData = stats.detectionTrends || [];
   const weeklyTrends = stats.weeklyTrends || [];
   const recentLogs = logs.slice(0, 4);
@@ -151,12 +183,14 @@ const Dashboard = () => {
       ) : (
         <>
           <div className="stats-grid">
-            <StatCard title="Total Detections" value={totals.detections} icon={ShieldAlert} subtext="Live threat shield active" />
-            <StatCard title="Total Messages Scanned" value={totals.totalScans || 0} icon={Activity} subtext="OCR & text scan checks" />
-            <StatCard title="Protected Members" value={totals.protectedUsers} icon={Users} subtext="Active members shielded" />
-            <StatCard title="Servers Connected" value={guilds.length} icon={Server} subtext="Servers in your workspace" />
-            <StatCard title="Punishments Issued" value={totals.punishments} icon={Zap} subtext="Bans and timeouts logged" />
-            <StatCard title="Warnings Logged" value={totals.warnings} icon={AlertTriangle} subtext="Scam triggers flagged" />
+            <StatCard title="Total Scans" value={totals.totalScans} icon={Activity} subtext="OCR & text scan checks" />
+            <StatCard title="Threat Detections" value={totals.totalThreats} icon={ShieldAlert} subtext="Malicious logs flagged" />
+            <StatCard title="Files Scanned Today" value={totals.filesScannedToday} icon={FileText} subtext="Images & attachments analyzed" />
+            <StatCard title="Users Flagged" value={totals.usersFlagged} icon={Users} subtext="Flagged for violation risk" />
+            <StatCard title="Servers Protected" value={totals.serversProtected} icon={Server} subtext="Active server connections" />
+            <StatCard title="Offenders Detected" value={totals.offendersDetected} icon={UserX} subtext="Logged in offender DB" />
+            <StatCard title="HistoryScan Runs" value={totals.historyScanExecutions} icon={History} subtext="Full sweeps executed" />
+            <StatCard title="VirusTotal Hits" value={totals.virusTotalDetections} icon={Globe} subtext="VT verified threats" />
           </div>
 
           <div className="dashboard-content-grid">

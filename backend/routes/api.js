@@ -1,8 +1,9 @@
 const router = require('express').Router();
 const axios = require('axios');
 const { ensureAuthenticated } = require('../middleware/auth');
-const { Settings, Log, Punishment, Warning, AuditLog, Subscription, DetectionLog, UserInfraction, GuildAnalytics, DeletedMessage, HistoricalScanJob } = require('../models');
+const { Settings, Log, Punishment, Warning, AuditLog, Subscription, DetectionLog, UserInfraction, GuildAnalytics, DeletedMessage, HistoricalScanJob, Notification, HistoryScan, ThreatEvent, ModerationAction, DashboardStats } = require('../models');
 const { activeScans, startHistoricalScan, cancelHistoricalScan, resumeHistoricalScan } = require('../helpers/scanner');
+const { recalculateDashboardStats } = require('../helpers/statsUpdater');
 
 // ==============================
 // GUILD AUTHORIZATION MIDDLEWARE
@@ -60,6 +61,12 @@ router.use('/analytics', ensureAuthenticated, (req, res, next) => {
 router.use('/scan/:guildId', ensureAuthenticated, checkGuildAdminPermission);
 router.use('/scan/status/:guildId', ensureAuthenticated, checkGuildAdminPermission);
 router.use('/premium/:guildId', ensureAuthenticated, checkGuildAdminPermission);
+router.use('/moderation/:guildId', ensureAuthenticated, checkGuildAdminPermission);
+router.use('/notifications/:guildId', ensureAuthenticated, checkGuildAdminPermission);
+router.use('/history-scans/:guildId', ensureAuthenticated, checkGuildAdminPermission);
+router.use('/dashboard-stats/:guildId', ensureAuthenticated, checkGuildAdminPermission);
+router.use('/moderation-center/:guildId', ensureAuthenticated, checkGuildAdminPermission);
+router.use('/server-management/:guildId', ensureAuthenticated, checkGuildAdminPermission);
 
 // ==============================
 // USER SESSION
@@ -1706,6 +1713,193 @@ router.post('/false-positive', ensureAuthenticated, async (req, res) => {
   } catch (error) {
     console.error('False positive action error:', error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+// ==============================
+// SOC NOTIFICATIONS API
+// ==============================
+
+// Fetch notifications
+router.get('/notifications/:guildId', ensureAuthenticated, async (req, res) => {
+  try {
+    const { guildId } = req.params;
+    const notifications = await Notification.find({ guildId })
+      .sort({ timestamp: -1 })
+      .limit(50);
+    res.json(notifications);
+  } catch (error) {
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+// Mark all as read
+router.post('/notifications/:guildId/read-all', ensureAuthenticated, async (req, res) => {
+  try {
+    const { guildId } = req.params;
+    await Notification.updateMany({ guildId, read: false }, { $set: { read: true } });
+    
+    // Fetch and return the updated notifications list
+    const notifications = await Notification.find({ guildId })
+      .sort({ timestamp: -1 })
+      .limit(50);
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`guild_${guildId}`).emit('notifications_read_all', { guildId });
+    }
+
+    res.json({ success: true, notifications });
+  } catch (error) {
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+// Mark single as read
+router.post('/notifications/:guildId/:notificationId/read', ensureAuthenticated, async (req, res) => {
+  try {
+    const { guildId, notificationId } = req.params;
+    const notification = await Notification.findOneAndUpdate(
+      { _id: notificationId, guildId },
+      { $set: { read: true } },
+      { new: true }
+    );
+    res.json({ success: true, notification });
+  } catch (error) {
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+// ==============================
+// SOC REAL-TIME DASHBOARD STATS API
+// ==============================
+router.get('/dashboard-stats/:guildId', ensureAuthenticated, async (req, res) => {
+  try {
+    const { guildId } = req.params;
+    const stats = await recalculateDashboardStats(guildId);
+    res.json(stats);
+  } catch (error) {
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+// ==============================
+// SOC HISTORY-SCANS RESULTS API
+// ==============================
+router.get('/history-scans/:guildId', ensureAuthenticated, async (req, res) => {
+  try {
+    const { guildId } = req.params;
+    const { search = '', riskLevel = '', actionTaken = '', page = 1, limit = 10 } = req.query;
+
+    const query = { guildId };
+
+    if (search) {
+      query.$or = [
+        { username: { $regex: search, $options: 'i' } },
+        { userId: { $regex: search, $options: 'i' } },
+        { findings: { $regex: search, $options: 'i' } },
+        { scanResults: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    if (riskLevel) {
+      query.riskLevel = riskLevel;
+    }
+
+    if (actionTaken) {
+      query.actionTaken = actionTaken;
+    }
+
+    const total = await HistoryScan.countDocuments(query);
+    const findings = await HistoryScan.find(query)
+      .sort({ timestamp: -1 })
+      .skip((Number(page) - 1) * Number(limit))
+      .limit(Number(limit));
+
+    res.json({
+      findings,
+      pagination: {
+        total,
+        page: Number(page),
+        limit: Number(limit),
+        pages: Math.ceil(total / Number(limit))
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+// ==============================
+// SOC UNIFIED MODERATION CENTER API
+// ==============================
+router.get('/moderation-center/:guildId', ensureAuthenticated, async (req, res) => {
+  try {
+    const { guildId } = req.params;
+    
+    // Fetch recent unified moderation actions
+    const recentActions = await ModerationAction.find({ guildId })
+      .sort({ timestamp: -1 })
+      .limit(50);
+
+    // Fetch HistoryScan findings
+    const historyScans = await HistoryScan.find({ guildId })
+      .sort({ timestamp: -1 })
+      .limit(50);
+
+    res.json({
+      recentActions,
+      historyScans
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+// ==============================
+// SOC SERVER MANAGEMENT API
+// ==============================
+router.get('/server-management/:guildId', ensureAuthenticated, async (req, res) => {
+  try {
+    const { guildId } = req.params;
+    
+    const client = req.app.get('discordClient');
+    let memberCount = 0;
+    if (client) {
+      const guild = client.guilds.cache.get(guildId);
+      if (guild) {
+        memberCount = guild.memberCount;
+      }
+    }
+
+    // Fetch counts from stats
+    const stats = await recalculateDashboardStats(guildId);
+    
+    // Last activity: date of last log or warning or deleted message
+    const lastLog = await Log.findOne({ guildId }).sort({ createdAt: -1 });
+    const lastWarn = await Warning.findOne({ guildId }).sort({ createdAt: -1 });
+    const lastDel = await DeletedMessage.findOne({ guildId }).sort({ deletedAt: -1 });
+
+    const dates = [lastLog?.createdAt, lastWarn?.createdAt, lastDel?.deletedAt].filter(Boolean);
+    const lastActivity = dates.length > 0 ? new Date(Math.max(...dates.map(d => d.getTime()))) : new Date();
+
+    // calculate an overall risk score
+    let riskScore = 0;
+    if (stats) {
+      riskScore = Math.min(100, Math.round(
+        (stats.totalThreats * 10) + (stats.virusTotalDetections * 20) + (stats.usersFlagged * 15)
+      ));
+    }
+
+    res.json({
+      memberCount,
+      scanCount: stats ? stats.totalScans : 0,
+      threatCount: stats ? stats.totalThreats : 0,
+      riskScore,
+      lastActivity
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Internal Server Error' });
   }
 });
 

@@ -4,16 +4,31 @@ import { useStore } from '../store/useStore';
 import './TopNav.css';
 
 const TopNav = () => {
-  const { user, guilds, activeGuild, setActiveGuild } = useStore();
+  const { 
+    user, 
+    guilds, 
+    activeGuild, 
+    setActiveGuild,
+    notifications,
+    notificationsLoading,
+    markAllNotificationsRead,
+    markNotificationRead
+  } = useStore();
+
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const dropdownRef = useRef(null);
+  const notificationsDropdownRef = useRef(null);
 
-  // Close dropdown on click outside
+  // Close dropdowns on click outside
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
         setDropdownOpen(false);
+      }
+      if (notificationsDropdownRef.current && !notificationsDropdownRef.current.contains(event.target)) {
+        setNotificationsOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -34,9 +49,25 @@ const TopNav = () => {
     window.open(inviteUrl, '_blank');
   };
 
+  const formatRelativeTime = (dateString) => {
+    const now = new Date();
+    const date = new Date(dateString);
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    return `${diffDays}d ago`;
+  };
+
   const userAvatar = user?.avatar 
     ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png`
     : 'https://cdn.discordapp.com/embed/avatars/0.png';
+
+  const unreadCount = notifications.filter(n => !n.read).length;
 
   return (
     <header className="topnav glass">
@@ -121,10 +152,59 @@ const TopNav = () => {
       </div>
 
       <div className="topnav-actions">
-        <button className="icon-btn action-btn">
-          <Bell size={20} />
-          {activeGuild?.botActive && <span className="badge">1</span>}
-        </button>
+        {/* Notifications Dropdown Button */}
+        {activeGuild?.botActive && (
+          <div className="notifications-container" ref={notificationsDropdownRef}>
+            <button 
+              className={`icon-btn action-btn ${notificationsOpen ? 'active' : ''}`}
+              onClick={() => setNotificationsOpen(!notificationsOpen)}
+            >
+              <Bell size={20} />
+              {unreadCount > 0 && <span className="badge">{unreadCount}</span>}
+            </button>
+
+            {notificationsOpen && (
+              <div className="notifications-dropdown glass glow">
+                <div className="notifications-header">
+                  <h3>Server Notifications</h3>
+                  {unreadCount > 0 && (
+                    <button 
+                      className="mark-read-btn"
+                      onClick={() => markAllNotificationsRead(activeGuild.id)}
+                    >
+                      Mark all as read
+                    </button>
+                  )}
+                </div>
+                <div className="notifications-list">
+                  {notifications.length === 0 ? (
+                    <div className="notifications-empty">No recent notifications</div>
+                  ) : (
+                    notifications.map((n) => (
+                      <div 
+                        key={n._id} 
+                        className={`notification-item ${!n.read ? 'unread' : ''}`}
+                        onClick={() => !n.read && markNotificationRead(activeGuild.id, n._id)}
+                      >
+                        {!n.read && <div className="notification-status-dot" />}
+                        <div className="notification-content">
+                          <div className="notification-title-row">
+                            <span className="notification-title">{n.title}</span>
+                            <span className="notification-time">{formatRelativeTime(n.timestamp)}</span>
+                          </div>
+                          <span className="notification-message">{n.message}</span>
+                          <span className={`notification-severity-badge ${n.severity || 'medium'}`}>
+                            {n.severity || 'medium'}
+                          </span>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
         
         {user && (
           <div className="user-profile">

@@ -272,5 +272,60 @@ export const apiService = {
     } catch (error) {
       return handleError(error);
     }
+  },
+
+  fetchNotifications: async (guildId) => {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/notifications/${guildId}`);
+      return handleResponse(response);
+    } catch (error) {
+      return handleError(error);
+    }
+  },
+
+  markAllNotificationsRead: async (guildId) => {
+    try {
+      const response = await axios.post(`${API_BASE_URL}/notifications/${guildId}/read-all`);
+      return handleResponse(response);
+    } catch (error) {
+      return handleError(error);
+    }
+  },
+
+  markNotificationRead: async (guildId, notificationId) => {
+    try {
+      const response = await axios.post(`${API_BASE_URL}/notifications/${guildId}/${notificationId}/read`);
+      return handleResponse(response);
+    } catch (error) {
+      return handleError(error);
+    }
+  },
+
+  fetchDashboardStats: async (guildId) => {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/dashboard-stats/${guildId}`);
+      return handleResponse(response);
+    } catch (error) {
+      return handleError(error);
+    }
+  },
+
+  fetchHistoryScans: async (guildId, page = 1, search = '', riskLevel = '', actionTaken = '') => {
+    try {
+      const params = { page, search, riskLevel, actionTaken };
+      const response = await axios.get(`${API_BASE_URL}/history-scans/${guildId}`, { params });
+      return handleResponse(response);
+    } catch (error) {
+      return handleError(error);
+    }
+  },
+
+  fetchServerManagement: async (guildId) => {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/server-management/${guildId}`);
+      return handleResponse(response);
+    } catch (error) {
+      return handleError(error);
+    }
   }
 };
