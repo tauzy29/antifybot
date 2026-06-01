@@ -12,7 +12,10 @@ const DashboardLayout = () => {
 
   // Validate session on load
   useEffect(() => {
-    fetchUser();
+    const timer = setTimeout(() => {
+      fetchUser();
+    }, 500);
+    return () => clearTimeout(timer);
   }, [fetchUser]);
 
   useEffect(() => {

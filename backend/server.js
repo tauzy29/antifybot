@@ -40,13 +40,27 @@ const authRoutes = require('./routes/auth');
 const apiRoutes = require('./routes/api');
 
 // ==============================
-// CREATE EXPRESS APP
+// CREATE EXPRESS APP & PROXIES
 // ==============================
 
 const app = express();
 app.set('trust proxy', 1);
 
 const server = http.createServer(app);
+
+// ==============================
+// CORS
+// ==============================
+
+app.use(cors({
+    origin: 'https://antifybot.pages.dev',
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
+}));
+
+// ==============================
+// SECURITY HEADERS & LIMITERS
+// ==============================
 
 // Use helmet for secure HTTP headers
 app.use(helmet({
@@ -93,16 +107,6 @@ const io = socketIo(server, {
 
 // Make io globally available
 app.set('io', io);
-
-// ==============================
-// CORS
-// ==============================
-
-app.use(cors({
-    origin: 'https://antifybot.pages.dev',
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
-}));
 
 // ==============================
 // BODY PARSERS
