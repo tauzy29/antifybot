@@ -17,7 +17,7 @@ passport.deserializeUser(async (id, done) => {
 
 const CLIENT_ID = process.env.CLIENT_ID;
 const CLIENT_SECRET = process.env.CLIENT_SECRET;
-const CALLBACK_URL = process.env.CALLBACK_URL || 'http://localhost:3000/auth/discord/callback';
+const CALLBACK_URL = process.env.DISCORD_CALLBACK_URL || 'https://antify-bot.duckdns.org/api/auth/callback';
 
 passport.use(new DiscordStrategy({
     clientID: CLIENT_ID,
