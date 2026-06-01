@@ -63,7 +63,7 @@ const OwnerPanel = () => {
         </div>
       </div>
 
-      {ownerGuildsLoading && ownerGuilds.length === 0 ? (
+      {ownerGuildsLoading && (ownerGuilds || []).length === 0 ? (
         <div className="owner-loading">
           <div className="loader-spinner"></div>
           <span>Loading servers index...</span>
@@ -83,7 +83,7 @@ const OwnerPanel = () => {
               </tr>
             </thead>
             <tbody>
-              {ownerGuilds.map((g) => {
+              {(ownerGuilds || []).map((g) => {
                 const isPro = g.tier === 'Pro';
                 
                 return (
@@ -187,7 +187,7 @@ const OwnerPanel = () => {
               })}
             </tbody>
           </table>
-          {ownerGuilds.length === 0 && (
+          {(ownerGuilds || []).length === 0 && (
             <div className="table-empty">
               <HelpCircle size={32} />
               <p>No guilds indexed matching search filters.</p>

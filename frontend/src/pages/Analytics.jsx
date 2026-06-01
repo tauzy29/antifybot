@@ -83,7 +83,7 @@ const Analytics = () => {
     .filter(item => item.value > 0);
 
   // Generate Scan Activity data (last 7 days message scans)
-  const scanActivityData = dailyStats.map(day => ({
+  const scanActivityData = (dailyStats || []).map(day => ({
     name: day.date ? new Date(day.date).toLocaleDateString(undefined, { weekday: 'short' }) : 'Day',
     Scans: day.messagesScanned || 0
   }));
@@ -99,7 +99,7 @@ const Analytics = () => {
   ];
 
   // Generate Moderation Activity data
-  const moderationActivityData = dailyStats.map(day => ({
+  const moderationActivityData = (dailyStats || []).map(day => ({
     name: day.date ? new Date(day.date).toLocaleDateString(undefined, { weekday: 'short' }) : 'Day',
     Warnings: day.warnings || 0,
     Punishments: day.punishments || 0,

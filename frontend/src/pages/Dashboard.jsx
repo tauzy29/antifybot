@@ -363,9 +363,9 @@ const Dashboard = () => {
                         <div className="deleted-msg-content">
                           "{msg.originalContent || '[Attachments Only]'}"
                         </div>
-                        {msg.attachments && msg.attachments.length > 0 && (
+                        {msg.attachments && (msg.attachments || []).length > 0 && (
                           <div className="deleted-msg-attachments">
-                            {msg.attachments.map((url, idx) => (
+                            {(msg.attachments || []).map((url, idx) => (
                               <a href={url} target="_blank" rel="noreferrer" key={idx} className="attachment-link">
                                 Attachment {idx + 1}
                               </a>

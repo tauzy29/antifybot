@@ -146,18 +146,18 @@ const Moderation = () => {
 
   const punishments = moderationData?.punishments || [];
   const warnings = moderationData?.warnings || [];
-  const appeals = punishments.filter(p => p.appealStatus && p.appealStatus !== 'None');
+  const appeals = (punishments || []).filter(p => p.appealStatus && p.appealStatus !== 'None');
 
   // Unified "Recent Actions" combining warnings, timeouts, kicks, bans
   const unifiedActions = [
-    ...warnings.map(w => ({
+    ...(warnings || []).map(w => ({
       ...w,
       unifiedType: 'Warning',
       actionDate: w.createdAt,
       targetId: w._id,
       isActive: w.active && !w.falsePositive
     })),
-    ...punishments.map(p => ({
+    ...(punishments || []).map(p => ({
       ...p,
       unifiedType: p.type,
       actionDate: p.createdAt,
@@ -176,9 +176,9 @@ const Moderation = () => {
     .sort((a, b) => new Date(b.actionDate) - new Date(a.actionDate));
 
   // Count active stats for badges
-  const activePunishmentsCount = punishments.filter(p => p.active && !p.expired && !p.revoked).length;
-  const warningListCount = warnings.filter(w => w.active).length;
-  const appealsCount = punishments.filter(p => p.appealStatus === 'Pending').length;
+  const activePunishmentsCount = (punishments || []).filter(p => p.active && !p.expired && !p.revoked).length;
+  const warningListCount = (warnings || []).filter(w => w.active).length;
+  const appealsCount = (punishments || []).filter(p => p.appealStatus === 'Pending').length;
 
   // Selected Evidence logic
   let selectedEvidence = (deletedMessages || []).find(m => m._id === selectedEvidenceId || m.messageId === selectedEvidenceId);
@@ -538,7 +538,7 @@ const Moderation = () => {
                             </tr>
                           </thead>
                           <tbody>
-                            {historyScans.map((scan) => {
+                            {(historyScans || []).map((scan) => {
                               // Define threat colors
                               let riskColor = '#10b981'; // Low
                               if (scan.riskLevel === 'Medium') riskColor = '#3b82f6';
@@ -695,11 +695,11 @@ const Moderation = () => {
                         )}
 
                         {/* Matched Keywords Tags */}
-                        {selectedEvidence.matchedKeywords && selectedEvidence.matchedKeywords.length > 0 && (
+                        {selectedEvidence.matchedKeywords && (selectedEvidence.matchedKeywords || []).length > 0 && (
                           <div style={{ marginTop: '16px' }}>
                             <span className="text-muted" style={{ fontSize: '0.8rem', display: 'block', marginBottom: '6px', fontWeight: 600 }}>Threat Trigger Keywords</span>
                             <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                              {selectedEvidence.matchedKeywords.map((kw, i) => (
+                              {(selectedEvidence.matchedKeywords || []).map((kw, i) => (
                                 <span className="keyword-tag" key={i} style={{ color: '#fca5a5', border: '1px solid rgba(239,68,68,0.2)', background: 'rgba(239,68,68,0.05)', padding: '2px 8px', borderRadius: '4px', fontSize: '0.75rem' }}>
                                   {kw}
                                 </span>
@@ -709,11 +709,11 @@ const Moderation = () => {
                         )}
 
                         {/* File Attachment Links */}
-                        {selectedEvidence.attachments && selectedEvidence.attachments.length > 0 && (
+                        {selectedEvidence.attachments && (selectedEvidence.attachments || []).length > 0 && (
                           <div style={{ marginTop: '16px' }}>
                             <span className="text-muted" style={{ fontSize: '0.8rem', display: 'block', marginBottom: '6px', fontWeight: 600 }}>Attachment Link Files</span>
                             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                              {selectedEvidence.attachments.map((url, idx) => (
+                              {(selectedEvidence.attachments || []).map((url, idx) => (
                                 <a 
                                   href={url} 
                                   target="_blank" 
@@ -895,7 +895,7 @@ const Moderation = () => {
                           </tr>
                         </thead>
                         <tbody>
-                          {appeals.map(appeal => {
+                          {(appeals || []).map(appeal => {
                             const isPending = appeal.appealStatus === 'Pending';
                             
                             return (
@@ -1004,7 +1004,7 @@ const Moderation = () => {
                           </tr>
                         </thead>
                         <tbody>
-                          {deletedMessages.map(msg => (
+                          {(deletedMessages || []).map(msg => (
                             <tr key={msg._id}>
                               <td>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -1123,7 +1123,7 @@ const Moderation = () => {
                           </tr>
                         </thead>
                         <tbody>
-                          {auditLogs.map(log => (
+                          {(auditLogs || []).map(log => (
                             <tr key={log._id}>
                               <td><strong>{log.adminName}</strong></td>
                               <td>

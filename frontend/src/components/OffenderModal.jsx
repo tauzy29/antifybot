@@ -102,10 +102,10 @@ const OffenderModal = ({ userId, guildId, onClose }) => {
             <div className="tab-pane">
               {activeTab === 'violations' && (
                 <div className="list-container">
-                  {data.history.violations.length === 0 ? (
+                  {!(data?.history?.violations) || (data?.history?.violations || []).length === 0 ? (
                     <div className="empty-state">No violations recorded.</div>
                   ) : (
-                    data.history.violations.map((v) => (
+                    (data?.history?.violations || []).map((v) => (
                       <div key={v._id} className="history-item-row">
                         <div className="item-row-left">
                           <span className="item-row-title">{v.type}</span>
@@ -122,10 +122,10 @@ const OffenderModal = ({ userId, guildId, onClose }) => {
 
               {activeTab === 'warnings' && (
                 <div className="list-container">
-                  {data.history.warnings.length === 0 ? (
+                  {!(data?.history?.warnings) || (data?.history?.warnings || []).length === 0 ? (
                     <div className="empty-state">No warnings recorded.</div>
                   ) : (
-                    data.history.warnings.map((w) => (
+                    (data?.history?.warnings || []).map((w) => (
                       <div key={w._id} className="history-item-row">
                         <div className="item-row-left">
                           <span className="item-row-title">Warning issued</span>
@@ -142,10 +142,10 @@ const OffenderModal = ({ userId, guildId, onClose }) => {
 
               {activeTab === 'punishments' && (
                 <div className="list-container">
-                  {data.history.punishments.length === 0 ? (
+                  {!(data?.history?.punishments) || (data?.history?.punishments || []).length === 0 ? (
                     <div className="empty-state">No punishments recorded.</div>
                   ) : (
-                    data.history.punishments.map((p) => (
+                    (data?.history?.punishments || []).map((p) => (
                       <div key={p._id} className="history-item-row">
                         <div className="item-row-left">
                           <span className="item-row-title">{p.type} Action</span>

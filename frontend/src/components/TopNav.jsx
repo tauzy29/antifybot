@@ -37,7 +37,7 @@ const TopNav = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const filteredGuilds = guilds.filter(g => 
+  const filteredGuilds = (guilds || []).filter(g => 
     g.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
@@ -69,7 +69,7 @@ const TopNav = () => {
     ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png`
     : 'https://cdn.discordapp.com/embed/avatars/0.png';
 
-  const unreadCount = notifications.filter(n => !n.read).length;
+  const unreadCount = (notifications || []).filter(n => !n.read).length;
   
   const isOwner = user && user.id === '1060801714187415552';
   const isLocked = !isOwner && premium?.plan !== 'Pro';
@@ -189,10 +189,10 @@ const TopNav = () => {
                   )}
                 </div>
                 <div className="notifications-list">
-                  {notifications.length === 0 ? (
+                  {(notifications || []).length === 0 ? (
                     <div className="notifications-empty">No recent notifications</div>
                   ) : (
-                    notifications.map((n) => (
+                    (notifications || []).map((n) => (
                       <div 
                         key={n._id} 
                         className={`notification-item ${!n.read ? 'unread' : ''}`}

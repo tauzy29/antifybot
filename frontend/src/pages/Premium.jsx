@@ -24,7 +24,7 @@ const PricingCard = ({ tier, price, icon: Icon, features, isActivePlan, isPopula
       </div>
 
       <div className="pricing-features">
-        {features.map((feature, i) => (
+        {(features || []).map((feature, i) => (
           <div key={i} className="feature-item">
             <Check size={18} className="check-icon" />
             <span>{feature}</span>

@@ -538,10 +538,10 @@ const Settings = () => {
               </form>
               
               <div className="keyword-tags">
-                {currentSettings.blacklistKeywords.length === 0 ? (
+                {(currentSettings.blacklistKeywords || []).length === 0 ? (
                   <div className="empty-keywords-text">No custom keywords. Default global list active.</div>
                 ) : (
-                  currentSettings.blacklistKeywords.map(kw => (
+                  (currentSettings.blacklistKeywords || []).map(kw => (
                     <span key={kw} className="keyword-tag">
                       {kw}
                       <button 

@@ -49,11 +49,11 @@ const PremiumGate = ({
             </div>
           )}
           
-          {benefits.length > 0 && (
+          {(benefits || []).length > 0 && (
             <div className="premium-gate-benefits">
               <p className="benefits-title">What you unlock with ANTIFY PRO:</p>
               <ul className="benefits-list">
-                {benefits.map((benefit, i) => (
+                {(benefits || []).map((benefit, i) => (
                   <li key={i} className="benefit-item">
                     <CheckCircle2 className="benefit-icon" />
                     <span>{benefit}</span>

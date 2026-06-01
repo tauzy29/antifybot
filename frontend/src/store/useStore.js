@@ -143,7 +143,7 @@ export const useStore = create((set, get) => ({
     set({ guildsLoading: true });
     try {
       const guilds = await apiService.fetchGuilds();
-      set({ guilds, guildsLoading: false });
+      set({ guilds: guilds || [], guildsLoading: false });
       
       // Determine guild to auto-select (persisted or bot-active or first item)
       if (guilds.length > 0) {
@@ -232,8 +232,8 @@ export const useStore = create((set, get) => ({
     try {
       const data = await apiService.fetchLogs(guildId, page, search, severity, type);
       set({ 
-        logs: data.logs, 
-        pagination: data.pagination, 
+        logs: data?.logs || [], 
+        pagination: data?.pagination || { total: 0, page: 1, limit: 10, pages: 1 }, 
         logsLoading: false 
       });
     } catch (error) {
@@ -248,8 +248,8 @@ export const useStore = create((set, get) => ({
     try {
       const data = await apiService.fetchDeletedMessages(guildId, page, search);
       set({
-        deletedMessages: data.messages,
-        deletedMessagesPagination: data.pagination,
+        deletedMessages: data?.messages || [],
+        deletedMessagesPagination: data?.pagination || { total: 0, page: 1, limit: 10, pages: 1 },
         deletedMessagesLoading: false
       });
     } catch (error) {
@@ -371,7 +371,7 @@ export const useStore = create((set, get) => ({
     set({ ownerGuildsLoading: true });
     try {
       const data = await apiService.fetchOwnerGuilds(search);
-      set({ ownerGuilds: data, ownerGuildsLoading: false });
+      set({ ownerGuilds: data || [], ownerGuildsLoading: false });
     } catch (error) {
       console.error('Fetch owner guilds failed:', error.message);
       set({ ownerGuildsLoading: false });
@@ -469,7 +469,13 @@ export const useStore = create((set, get) => ({
     set({ moderationLoading: true });
     try {
       const data = await apiService.fetchModerationData(guildId);
-      set({ moderationData: data, moderationLoading: false });
+      set({ 
+        moderationData: {
+          punishments: data?.punishments || [],
+          warnings: data?.warnings || []
+        }, 
+        moderationLoading: false 
+      });
     } catch (error) {
       console.error('Fetch moderation data failed:', error.message);
       set({ moderationLoading: false });
@@ -571,7 +577,7 @@ export const useStore = create((set, get) => ({
     if (!guildId) return;
     try {
       const data = await apiService.fetchAuditLogs(guildId);
-      set({ auditLogs: data });
+      set({ auditLogs: data || [] });
     } catch (error) {
       console.error('Fetch audit logs failed:', error.message);
     }
@@ -650,7 +656,7 @@ export const useStore = create((set, get) => ({
     set({ notificationsLoading: true });
     try {
       const notifications = await apiService.fetchNotifications(guildId);
-      set({ notifications, notificationsLoading: false });
+      set({ notifications: notifications || [], notificationsLoading: false });
     } catch (error) {
       console.error('Fetch notifications failed:', error.message);
       set({ notificationsLoading: false });
@@ -675,7 +681,7 @@ export const useStore = create((set, get) => ({
       const data = await apiService.markNotificationRead(guildId, notificationId);
       if (data.success) {
         set(state => ({
-          notifications: state.notifications.map(n => 
+          notifications: (state.notifications || []).map(n => 
             n._id === notificationId ? { ...n, read: true } : n
           )
         }));
@@ -709,8 +715,8 @@ export const useStore = create((set, get) => ({
     try {
       const data = await apiService.fetchHistoryScans(guildId, page, search, riskLevel, actionTaken);
       set({
-        historyScans: data.findings,
-        historyScansPagination: data.pagination,
+        historyScans: data?.findings || [],
+        historyScansPagination: data?.pagination || { total: 0, page: 1, limit: 10, pages: 1 },
         historyScansLoading: false
       });
     } catch (error) {
@@ -913,7 +919,7 @@ export const useStore = create((set, get) => ({
 
       socketConnection.on('guild_removed', (removedGuildId) => {
         set(state => {
-          const updatedGuilds = state.guilds.filter(g => g.id !== removedGuildId);
+          const updatedGuilds = (state.guilds || []).filter(g => g.id !== removedGuildId);
           get().addAlert(`🤖 Bot removed from server.`, 'warning');
           
           let nextActive = state.activeGuild;

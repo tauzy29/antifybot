@@ -39,7 +39,7 @@ const Toasts = () => {
   return (
     <div className="toasts-container">
       <AnimatePresence>
-        {alerts.map((alert) => (
+        {(alerts || []).map((alert) => (
           <Toast key={alert.id} alert={alert} />
         ))}
       </AnimatePresence>
