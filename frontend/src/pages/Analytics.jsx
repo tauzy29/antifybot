@@ -42,7 +42,7 @@ const Analytics = () => {
     );
   }
 
-  const totals = stats.totals || {
+  const totals = stats?.totals || {
     detections: 0,
     punishments: 0,
     bans: 0,
@@ -56,7 +56,7 @@ const Analytics = () => {
   };
 
   // Extract Daily, Weekly, Monthly values from dailyStats / rawAnalytics
-  const dailyStats = stats.rawAnalytics?.dailyStats || [];
+  const dailyStats = stats?.rawAnalytics?.dailyStats || [];
   
   // Daily scans: last day's scan count or fallback
   const dailyScans = dailyStats.length > 0 
@@ -65,14 +65,14 @@ const Analytics = () => {
 
   // Weekly scans: sum of last 7 days or fallback
   const weeklyScans = dailyStats.length > 0 
-    ? dailyStats.slice(-7).reduce((acc, curr) => acc + (curr.messagesScanned || 0), 0)
+    ? (dailyStats || []).slice(-7).reduce((acc, curr) => acc + (curr.messagesScanned || 0), 0)
     : (totals.totalScans ? Math.round(totals.totalScans / 4) : 185);
 
   // Monthly scans: total scans or fallback
   const monthlyScans = totals.totalScans || 720;
 
-  const detectionData = stats.detectionTrends || [];
-  const ocrData = stats.ocrTrends || [];
+  const detectionData = stats?.detectionTrends || [];
+  const ocrData = stats?.ocrTrends || [];
 
   const detectionsByChannelType = totals.detectionsByChannelType || {};
   const channelData = Object.entries(detectionsByChannelType)

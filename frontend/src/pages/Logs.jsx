@@ -14,12 +14,13 @@ const SeverityBadge = ({ severity }) => {
     critical: { icon: XCircle, color: 'text-purple', bg: 'bg-purple-light' },
   };
   
-  const { icon: Icon, color, bg } = config[severity] || config.low;
+  const displaySeverity = severity || 'low';
+  const { icon: Icon, color, bg } = config[displaySeverity] || config.low;
   
   return (
     <div className={`severity-badge ${bg} ${color}`}>
       <Icon size={14} />
-      <span>{severity.charAt(0).toUpperCase() + severity.slice(1)}</span>
+      <span>{displaySeverity.charAt(0).toUpperCase() + displaySeverity.slice(1)}</span>
     </div>
   );
 };
@@ -135,7 +136,7 @@ const Logs = () => {
 
         {logsLoading ? (
           <div className="logs-loading-state">Querying active threat database...</div>
-        ) : logs.length === 0 ? (
+        ) : (logs || []).length === 0 ? (
           <div className="logs-empty-state">No audit logs found matching criteria.</div>
         ) : (
           <div className="table-responsive">
@@ -151,7 +152,7 @@ const Logs = () => {
                 </tr>
               </thead>
               <tbody>
-                {logs.map((log) => (
+                {(logs || []).map((log) => (
                   <tr 
                     key={log._id} 
                     className="log-row clickable"

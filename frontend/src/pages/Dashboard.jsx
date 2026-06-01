@@ -83,19 +83,19 @@ const Dashboard = () => {
   }
 
   const totals = {
-    totalScans: stats.totals?.totalScans || dashboardStats?.totalScans || 0,
-    totalThreats: stats.totals?.totalThreats || stats.totals?.detections || dashboardStats?.totalThreats || 0,
-    filesScannedToday: stats.totals?.filesScannedToday || dashboardStats?.filesScannedToday || 0,
-    usersFlagged: stats.totals?.usersFlagged || dashboardStats?.usersFlagged || 0,
-    serversProtected: stats.totals?.serversProtected || dashboardStats?.serversProtected || 1,
-    offendersDetected: stats.totals?.offendersDetected || dashboardStats?.offendersDetected || 0,
-    historyScanExecutions: stats.totals?.historyScanExecutions || dashboardStats?.historyScanExecutions || 0,
-    virusTotalDetections: stats.totals?.virusTotalDetections || dashboardStats?.virusTotalDetections || 0,
+    totalScans: stats?.totals?.totalScans || dashboardStats?.totalScans || 0,
+    totalThreats: stats?.totals?.totalThreats || stats?.totals?.detections || dashboardStats?.totalThreats || 0,
+    filesScannedToday: stats?.totals?.filesScannedToday || dashboardStats?.filesScannedToday || 0,
+    usersFlagged: stats?.totals?.usersFlagged || dashboardStats?.usersFlagged || 0,
+    serversProtected: stats?.totals?.serversProtected || dashboardStats?.serversProtected || 1,
+    offendersDetected: stats?.totals?.offendersDetected || dashboardStats?.offendersDetected || 0,
+    historyScanExecutions: stats?.totals?.historyScanExecutions || dashboardStats?.historyScanExecutions || 0,
+    virusTotalDetections: stats?.totals?.virusTotalDetections || dashboardStats?.virusTotalDetections || 0,
   };
 
-  const trendData = stats.detectionTrends || [];
-  const weeklyTrends = stats.weeklyTrends || [];
-  const recentLogs = logs.slice(0, 4);
+  const trendData = stats?.detectionTrends || [];
+  const weeklyTrends = stats?.weeklyTrends || [];
+  const recentLogs = (logs || []).slice(0, 4);
 
   return (
     <div className="dashboard-page">
@@ -350,10 +350,10 @@ const Dashboard = () => {
                 <div className="deleted-messages-list">
                   {deletedMessagesLoading ? (
                     <div className="loading-locker-text">Loading evidence files...</div>
-                  ) : !deletedMessages || deletedMessages.length === 0 ? (
+                  ) : !deletedMessages || (deletedMessages || []).length === 0 ? (
                     <div className="empty-feed-text">No deleted messages archived yet. Server is clean!</div>
                   ) : (
-                    deletedMessages.slice(0, 5).map((msg) => (
+                    (deletedMessages || []).slice(0, 5).map((msg) => (
                       <div key={msg._id} className="deleted-msg-item glass">
                         <div className="deleted-msg-header">
                           <span className="deleted-msg-author">{msg.username}</span>

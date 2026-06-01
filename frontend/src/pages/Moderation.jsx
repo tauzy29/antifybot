@@ -181,10 +181,10 @@ const Moderation = () => {
   const appealsCount = punishments.filter(p => p.appealStatus === 'Pending').length;
 
   // Selected Evidence logic
-  let selectedEvidence = deletedMessages.find(m => m._id === selectedEvidenceId || m.messageId === selectedEvidenceId);
-  if (!selectedEvidence && historyScans && historyScans.length > 0) {
+  let selectedEvidence = (deletedMessages || []).find(m => m._id === selectedEvidenceId || m.messageId === selectedEvidenceId);
+  if (!selectedEvidence && (historyScans || []).length > 0) {
     // Check if the selectedEvidenceId matches a history scan record's evidenceId or data
-    const matchedScan = historyScans.find(s => s.evidenceId === selectedEvidenceId || s._id === selectedEvidenceId);
+    const matchedScan = (historyScans || []).find(s => s.evidenceId === selectedEvidenceId || s._id === selectedEvidenceId);
     if (matchedScan) {
       selectedEvidence = {
         _id: matchedScan.evidenceId || matchedScan._id,
@@ -205,8 +205,8 @@ const Moderation = () => {
     }
   }
   // Default to first deleted message if none selected
-  if (!selectedEvidence && deletedMessages.length > 0) {
-    selectedEvidence = deletedMessages[0];
+  if (!selectedEvidence && (deletedMessages || []).length > 0) {
+    selectedEvidence = (deletedMessages || [])[0];
   }
 
   // Navigation menu items
@@ -215,7 +215,7 @@ const Moderation = () => {
     { id: 'history', label: 'HistoryScan Results', icon: History },
     { id: 'evidence', label: 'Evidence Viewer', icon: Eye },
     { id: 'appeals', label: 'Appeals Panel', icon: CheckCircle, count: appealsCount },
-    { id: 'falsepositives', label: 'False Positive Review', icon: RotateCcw, count: deletedMessages.filter(m => m.falsePositive).length },
+    { id: 'falsepositives', label: 'False Positive Review', icon: RotateCcw, count: (deletedMessages || []).filter(m => m.falsePositive).length },
     { id: 'auditlogs', label: 'Audit Logs', icon: FileText }
   ];
 
@@ -326,8 +326,8 @@ const Moderation = () => {
                           </tr>
                         </thead>
                         <tbody>
-                          {unifiedActions.slice(0, 30).map((act, idx) => {
-                            const actEvidence = deletedMessages.find(m => m._id === act.evidenceId || m.messageId === act.evidenceId);
+                          {(unifiedActions || []).slice(0, 30).map((act, idx) => {
+                            const actEvidence = (deletedMessages || []).find(m => m._id === act.evidenceId || m.messageId === act.evidenceId);
                             const channelType = actEvidence?.channelType || 'GuildText';
                             const channelName = actEvidence?.channelName || '';
                             
@@ -637,12 +637,12 @@ const Moderation = () => {
                       onChange={(e) => setSelectedEvidenceId(e.target.value)}
                     >
                       <option value="">-- Choose Incident Log / Attachment File --</option>
-                      {deletedMessages.map(m => (
+                       {(deletedMessages || []).map(m => (
                         <option key={m._id} value={m._id}>
                           [DELETED] {m.username} - {m.detectionType} ({new Date(m.deletedAt).toLocaleTimeString()})
                         </option>
                       ))}
-                      {historyScans.map(s => (
+                      {(historyScans || []).map(s => (
                         <option key={s._id} value={s._id}>
                           [HISTORICAL] {s.username} - Threat: {s.threatScore}% ({new Date(s.timestamp).toLocaleDateString()})
                         </option>
