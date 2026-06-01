@@ -8,11 +8,9 @@ const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
 const cors = require('cors');
-const session = require('express-session');
 const passport = require('passport');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
-const MongoStore = require('connect-mongo').default || require('connect-mongo');
 
 const connectDB = require('./db');
 
@@ -119,33 +117,34 @@ app.use(express.urlencoded({
 }));
 
 // ==============================
-// SESSION CONFIG
+// JWT AUTHENTICATION MIDDLEWARE
 // ==============================
 
-app.use(session({
-  secret: process.env.SESSION_SECRET || 'antify_super_secret',
-  resave: false,
-  saveUninitialized: false,
-  store: MongoStore.create({
-    mongoUrl: process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/antify',
-    collectionName: 'sessions',
-    ttl: 7 * 24 * 60 * 60 // 7 days
-  }),
-  cookie: {
-    secure: true,
-    sameSite: 'none',
-    httpOnly: true,
-    maxAge: 7 * 24 * 60 * 60 * 1000
+const jwt = require('jsonwebtoken');
+const { User } = require('./models');
+
+app.use(async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.split(' ')[1];
+      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'antify_jwt_secret');
+      const user = await User.findById(decoded.id);
+      if (user) {
+        req.user = user;
+      }
+    }
+  } catch (err) {
+    console.warn('Optional JWT authentication failed:', err.message);
   }
-}));
+  next();
+});
 
 // ==============================
 // PASSPORT
 // ==============================
 
 app.use(passport.initialize());
-
-app.use(passport.session());
 
 // ==============================
 // ROUTES

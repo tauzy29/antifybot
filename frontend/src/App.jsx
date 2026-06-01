@@ -12,6 +12,7 @@ import './index.css';
 
 // Lazy load page components for bundle optimization & code splitting
 const Login = lazy(() => import('./pages/Login'));
+const LoginSuccess = lazy(() => import('./pages/LoginSuccess'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Analytics = lazy(() => import('./pages/Analytics'));
 const Logs = lazy(() => import('./pages/Logs'));
@@ -38,6 +39,10 @@ function App() {
             <Route
               path="/login"
               element={<Login />}
+            />
+            <Route
+              path="/login/success"
+              element={<LoginSuccess />}
             />
 
             {/* =========================

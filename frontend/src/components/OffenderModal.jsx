@@ -13,9 +13,7 @@ const OffenderModal = ({ userId, guildId, onClose }) => {
   useEffect(() => {
     const fetchOffender = async () => {
       try {
-        const res = await axios.get(`${API_BASE_URL}/users/${guildId}/${userId}`, {
-          withCredentials: true
-        });
+        const res = await axios.get(`${API_BASE_URL}/users/${guildId}/${userId}`);
         setData(res.data);
       } catch (err) {
         console.error('Error fetching offender profile:', err);

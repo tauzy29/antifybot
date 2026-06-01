@@ -11,9 +11,8 @@ const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
 // ====================================
 
 router.get('/login',
-
   passport.authenticate('discord', {
-
+    session: false,
     scope: ['identify', 'guilds']
   })
 );
@@ -23,19 +22,20 @@ router.get('/login',
 // ====================================
 
 router.get('/callback',
-
   passport.authenticate('discord', {
-
-    failureRedirect:
-      `${FRONTEND_URL}/login`
+    failureRedirect: `${FRONTEND_URL}/login`,
+    session: false
   }),
-
-(req, res) => {
-
-  res.redirect(
-    `${FRONTEND_URL}/dashboard`
-  );
-});
+  (req, res) => {
+    const jwt = require('jsonwebtoken');
+    const token = jwt.sign(
+      { id: req.user._id },
+      process.env.JWT_SECRET || 'antify_jwt_secret',
+      { expiresIn: '7d' }
+    );
+    res.redirect(`${FRONTEND_URL}/login/success?token=${token}`);
+  }
+);
 
 // ====================================
 // CURRENT USER
