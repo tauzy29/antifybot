@@ -114,9 +114,10 @@ app.use(xss());
 app.use(hpp());
 
 // Apply rate limiter to all API endpoints
+app.set('trust proxy', 1);
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
+  max: 5, // limit each IP to 5 requests per windowMs (temporarily for manual testing)
   message: { error: 'Too many requests. Please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
