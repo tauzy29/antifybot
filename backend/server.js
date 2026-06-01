@@ -11,6 +11,9 @@ const cors = require('cors');
 const passport = require('passport');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const mongoSanitize = require('express-mongo-sanitize');
+const xss = require('xss-clean');
+const hpp = require('hpp');
 
 const connectDB = require('./db');
 
@@ -60,10 +63,55 @@ app.use(cors({
 // SECURITY HEADERS & LIMITERS
 // ==============================
 
-// Use helmet for secure HTTP headers
+// 1. Helmet (Strict HTTP Security Headers & Content Security Policy)
 app.use(helmet({
-  contentSecurityPolicy: false, // Disabled to avoid issues with CDN resources like Discord avatars
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: [
+        "'self'",
+        "https://antifybot.pages.dev",
+        "https://*.cloudflare.com",
+        "https://discord.com",
+        "https://*.discord.com",
+        "http://localhost:5173"
+      ],
+      connectSrc: [
+        "'self'",
+        "https://antifybot.pages.dev",
+        "https://antify-bot.duckdns.org",
+        "https://discord.com",
+        "https://*.discord.com",
+        "wss://antify-bot.duckdns.org",
+        "ws://localhost:5000",
+        "ws://localhost:5173",
+        "http://localhost:5000",
+        "http://localhost:5173"
+      ],
+      imgSrc: [
+        "'self'",
+        "data:",
+        "https://cdn.discordapp.com",
+        "https://discordapp.com",
+        "https://*.discordapp.com"
+      ],
+      styleSrc: [
+        "'self'",
+        "'unsafe-inline'"
+      ],
+      upgradeInsecureRequests: []
+    }
+  }
 }));
+
+// 2. MongoDB Operator Injection Sanitization
+app.use(mongoSanitize());
+
+// 3. Cross-Site Scripting (XSS) Sanitization
+app.use(xss());
+
+// 4. HTTP Parameter Pollution Protection
+app.use(hpp());
 
 // Apply rate limiter to all API endpoints
 const apiLimiter = rateLimit({
