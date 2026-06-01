@@ -68,8 +68,8 @@ app.use(helmet({
 // Apply rate limiter to all API endpoints
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 150, // limit each IP to 150 requests per windowMs
-  message: { error: 'Too many requests from this IP, please try again after 15 minutes.' },
+  max: 100, // limit each IP to 100 requests per windowMs
+  message: { error: 'Too many requests. Please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
 });

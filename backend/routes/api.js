@@ -5,6 +5,9 @@ const { Settings, Log, Punishment, Warning, AuditLog, Subscription, DetectionLog
 const { activeScans, startHistoricalScan, cancelHistoricalScan, resumeHistoricalScan } = require('../helpers/scanner');
 const { recalculateDashboardStats } = require('../helpers/statsUpdater');
 
+// In-memory cache for guild settings (Task 2)
+const settingsCache = new Map();
+
 // ==============================
 // GUILD AUTHORIZATION MIDDLEWARE
 // ==============================
@@ -491,11 +494,25 @@ router.get('/punishments/:guildId', ensureAuthenticated, async (req, res) => {
 // ==============================
 router.get('/settings/:guildId', ensureAuthenticated, async (req, res) => {
   try {
-    let settings = await Settings.findOne({ guildId: req.params.guildId });
+    const { guildId } = req.params;
+    const now = Date.now();
+    const cached = settingsCache.get(guildId);
+
+    if (cached && (now - cached.timestamp < 60000)) {
+      return res.json(cached.data);
+    }
+
+    let settings = await Settings.findOne({ guildId });
     if (!settings) {
-      settings = new Settings({ guildId: req.params.guildId });
+      settings = new Settings({ guildId });
       await settings.save();
     }
+
+    settingsCache.set(guildId, {
+      data: settings,
+      timestamp: now
+    });
+
     res.json(settings);
   } catch (error) {
     res.status(500).json({ error: 'Internal Server Error' });
@@ -554,6 +571,7 @@ router.post('/settings/:guildId', ensureAuthenticated, async (req, res) => {
 
     if (changedFields.length > 0) {
       await settings.save();
+      settingsCache.delete(guildId);
       const audit = new AuditLog({
         guildId,
         adminId: req.user.discordId,
@@ -585,6 +603,7 @@ router.post('/settings/:guildId/keywords', ensureAuthenticated, async (req, res)
 
     settings.blacklistKeywords.push(keyword);
     await settings.save();
+    settingsCache.delete(guildId);
 
     const audit = new AuditLog({
       guildId,
@@ -611,6 +630,7 @@ router.delete('/settings/:guildId/keywords/:keyword', ensureAuthenticated, async
 
     settings.blacklistKeywords = settings.blacklistKeywords.filter(k => k !== keyword);
     await settings.save();
+    settingsCache.delete(guildId);
 
     const audit = new AuditLog({
       guildId,
