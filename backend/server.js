@@ -84,7 +84,7 @@ connectDB();
 
 const io = socketIo(server, {
   cors: {
-    origin: FRONTEND_URL,
+    origin: ['https://antifybot.pages.dev', FRONTEND_URL, 'http://localhost:5173'],
     methods: ['GET', 'POST'],
     credentials: true
   }
@@ -98,8 +98,10 @@ app.set('io', io);
 // ==============================
 
 app.use(cors({
-  origin: FRONTEND_URL,
-  credentials: true
+  origin: ['https://antifybot.pages.dev', FRONTEND_URL, 'http://localhost:5173'],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 // ==============================
